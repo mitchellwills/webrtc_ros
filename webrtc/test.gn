@@ -1,0 +1,120 @@
+import("//build/config/arm.gni")
+import("//build/config/crypto.gni")
+import("//build/config/linux/pkg_config.gni")
+import("build/webrtc.gni")
+
+config("common_config") {
+  cflags = []
+  cflags_cc = []
+  if (rtc_restrict_logging) {
+    defines = [ "WEBRTC_RESTRICT_LOGGING" ]
+  }
+
+  if (rtc_have_dbus_glib) {
+    defines += [ "HAVE_DBUS_GLIB" ]
+    # TODO(kjellander): Investigate this, it seems like include <dbus/dbus.h>
+    # is still not found even if the execution of
+    # build/config/linux/pkg-config.py dbus-glib-1 returns correct include
+    # dirs on Linux.
+    all_dependent_configs = [ "dbus-glib" ]
+  }
+
+  if (rtc_enable_video) {
+    defines += [ "WEBRTC_MODULE_UTILITY_VIDEO" ]
+  }
+
+  if (build_with_chromium) {
+    defines += [ "LOGGING_INSIDE_WEBRTC" ]
+  } else {
+    if (is_posix) {
+      # -Wextra is currently disabled in Chromium"s common.gypi. Enable
+      # for targets that can handle it. For Android/arm64 right now
+      # there will be an "enumeral and non-enumeral type in conditional
+      # expression" warning in android_tools/ndk_experimental"s version
+      # of stlport.
+      # See: https://code.google.com/p/chromium/issues/detail?id=379699
+#      if (cpu_arch != "arm64" || !is_android) {
+        cflags = [
+          "-Wextra",
+          # We need to repeat some flags from Chromium"s common.gypi
+          # here that get overridden by -Wextra.
+          "-Wno-unused-parameter",
+          "-Wno-missing-field-initializers",
+          "-Wno-strict-overflow",
+        ]
+        cflags_cc = [
+          "-Wnon-virtual-dtor",
+          # This is enabled for clang; enable for gcc as well.
+          "-Woverloaded-virtual",
+        ]
+#      }
+    }
+
+    if (is_clang) {
+      cflags += [ "-Wthread-safety" ]
+    }
+  }
+
+  if (cpu_arch == "arm64") {
+    defines += [ "WEBRTC_ARCH_ARM" ]
+    # TODO(zhongwei) Defining an unique WEBRTC_NEON and
+    # distinguishing ARMv7 NEON and ARM64 NEON by
+    # WEBRTC_ARCH_ARM_V7 and WEBRTC_ARCH_ARM64 should be better.
+
+    # This macro is used to distinguish ARMv7 NEON and ARM64 NEON
+    defines += [ "WEBRTC_ARCH_ARM64_NEON" ]
+  }
+
+#  if (cpu_arch == "arm") {
+#    defines += [ "WEBRTC_ARCH_ARM" ]
+#    if (arm_version >= 7) {
+#      defines += [ "WEBRTC_ARCH_ARM_V7" ]
+#      if (arm_use_neon) {
+#        defines += [ "WEBRTC_ARCH_ARM_NEON" ]
+#      } else if (is_android) {
+#        defines += [ "WEBRTC_DETECT_ARM_NEON" ]
+#      }
+#    }
+#  }
+
+#  if (cpu_arch == "mipsel") {
+#    defines += [ "MIPS32_LE" ]
+#    if (mips_fpu) {
+#      defines += [ "MIPS_FPU_LE" ]
+#      cflags += [ "-mhard-float" ]
+#    } else {
+#      cflags += [ "-msoft-float" ]
+#    }
+#    if (mips_arch_variant == "mips32r2") {
+#      defines += [ "MIPS32_R2_LE" ]
+#      cflags += [ "-mips32r2" ]
+#      cflags_cc += [ "-mips32r2" ]
+#    }
+#    if (mips_dsp_rev == 1) {
+#      defines += [ "MIPS_DSP_R1_LE" ]
+#      cflags += [ "-mdsp" ]
+#      cflags_cc += [ "-mdsp" ]
+#    } else if (mips_dsp_rev == 2) {
+#      defines += [
+#        "MIPS_DSP_R1_LE",
+#        "MIPS_DSP_R2_LE",
+#      ]
+#      cflags += [ "-mdspr2" ]
+#      cflags_cc += [ "-mdspr2" ]
+#    }
+#  }
+
+  # TODO(kjellander): Handle warnings on Windows where WebRTC differ from the
+  # default warnings set in build/config/compiler/BUILD.gn.
+
+#  if (is_android && is_clang) {
+#    # The Android NDK doesn"t provide optimized versions of these
+#    # functions. Ensure they are disabled for all compilers.
+#    cflags += [
+#      "-fno-builtin-cos",
+#      "-fno-builtin-sin",
+#      "-fno-builtin-cosf",
+#      "-fno-builtin-sinf",
+#    ]
+#  }
+}
