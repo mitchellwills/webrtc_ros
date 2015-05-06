@@ -1,65 +1,8 @@
 #!/usr/bin/env python
 
 import sys
-from pyparsing import Word, alphas, restOfLine, OneOrMore, Or, QuotedString, ZeroOrMore, Optional, Group, Literal, delimitedList, Empty, ParseResults, Forward, operatorPrecedence, opAssoc,oneOf,NotAny, nums
-
-comment = Literal("#") + restOfLine
-
-variable = Word(alphas+"_", alphas+"_"+nums)
-integer = Word(nums).setParseAction( lambda s,l,t: [ int(t[0]) ] )
-string = QuotedString(quoteChar="\"", escChar="\\")
-
-value = Forward()
-expression = Forward()
-operand = Or([variable, value])
-list_value = operand # don't include operations cause it slows things down significantly
-
-gn_list = Literal("[").suppress() \
-         + Group(Or([delimitedList(list_value, delim=","), ZeroOrMore(list_value + Literal(",").suppress())]))("list") \
-          + Literal("]").suppress()
-value << Or([integer, string, gn_list])
-
-operation = operatorPrecedence(operand,
-                               [
-                                   (Literal('!'), 1, opAssoc.RIGHT),
-                                   (oneOf('* /'), 2, opAssoc.LEFT),
-                                   (oneOf('+ -'), 2, opAssoc.LEFT),
-                                   (oneOf(['==','!=','>','<','<=','>=']), 2, opAssoc.LEFT),
-                                   (oneOf(['||','&&']), 2, opAssoc.LEFT),
-                                   (oneOf(['-=','+=','=']), 2, opAssoc.LEFT)
-                               ]
-).setResultsName("operation")
-expression << Or([operation, operand])
-
-statementOp = operatorPrecedence(operand,
-                                 [
-                                     (oneOf(['-=','+=','=']), 2, opAssoc.LEFT)
-                                 ]
-                             ).setResultsName("operation")
-
-function = Forward()
-conditional = Forward()
-statement = Or([statementOp, conditional, function])
-statements = ZeroOrMore(statement)
-
-conditional << Group(Literal("if").suppress()+Literal("(").suppress()+expression("condition")+Literal(")").suppress()
-                     + Literal("{").suppress() + statements("body") + Literal("}").suppress()
-                     + Optional(Or([
-                         Literal("else").suppress() + Literal("{").suppress() + statements("else_body") + Literal("}").suppress(),
-                         Literal("else").suppress() + Group(statement)("else_body")
-                     ]))
-                 )("conditional")
-
-
-
-function_name = ~Literal("if") + Word(alphas+"_")
-function_block = statements
-function_arg = expression
-function_args = Group(delimitedList(function_arg ,delim=','))
-function << Group(function_name("name")+Literal("(").suppress()+function_args("args")+Literal(")").suppress()
-                  + Optional(Literal("{").suppress() + function_block("body") + Literal("}").suppress()))("function")
-
-gn_file = statements.ignore(comment)
+import ply.lex as lex
+import ply.yacc as yacc
 
 def astToString(o, prefix=''):
     if hasattr(o, "toString"):
@@ -69,7 +12,7 @@ def astToString(o, prefix=''):
     else:
         return prefix + str(o)
 
-class Statement(object):
+class Assignment(object):
     def __init__(self, var, op, value):
         self.var = var
         self.op = op
@@ -77,18 +20,7 @@ class Statement(object):
     def __repr__(self):
         return "Statement("+str(self.var)+" "+self.op+" "+str(self.value)+")"
 
-class Operation(object):
-    def __init__(self, op, arg1, arg2=None):
-        self.op = op
-        self.arg1 = arg1
-        self.arg2 = arg2
-    def __repr__(self):
-        if self.arg2 is None:
-            return "Operation("+str(self.op)+" "+str(self.arg1) +")"
-        else:
-            return "Operation("+str(self.arg1)+" "+str(self.op)+" "+str(self.arg2) +")"
-
-class Func(object):
+class Call(object):
     def __init__(self, name, args, body=None):
         self.name = name
         self.args = args
@@ -107,13 +39,7 @@ class Func(object):
             s += "}"
         return s
 
-class Variable(object):
-    def __init__(self, name):
-        self.name = name
-    def __repr__(self):
-        return "Variable("+self.name+")"
-
-class Conditional(object):
+class Condition(object):
     def __init__(self, condition, body, else_body = None):
         self.condition = condition
         self.body = body
@@ -132,80 +58,266 @@ class Conditional(object):
             s += "}"
         return s
 
-def parseOperation(e):
-    return Statement(e.variable, e.op, parseOperand(e.value))
+def build_parser():
+    reserved = {
+       'if' : 'IF',
+       'else' : 'ELSE',
+    }
 
-def parseValue(e):
-    if type(e) == ParseResults:
-        if e.getName() == "list":
-            return e.asList()
-        elif len(e) == 1:
-            return e[0]
+    tokens = [
+        'INTEGER',
+        'BOOL',
+        'PLUS',
+        'MINUS',
+        'EQUALS',
+        'PLUS_EQUALS',
+        'MINUS_EQUALS',
+        'LPAREN',
+        'RPAREN',
+        'LBRACE',
+        'RBRACE',
+        'LSBRACE',
+        'RSBRACE',
+        'IDENTIFIER',
+        'STRING',
+        'BOOL_OR',
+        'BOOL_AND',
+        'LT_EQ',
+        'GT_EQ',
+        'LT',
+        'GT',
+        'EQ',
+        'NOT_EQ',
+        'COMMA',
+        'NOT',
+    ] + list(reserved.values())
+
+    t_PLUS    = r'\+'
+    t_MINUS   = r'-'
+    t_COMMA   = r','
+    t_EQUALS  = r'='
+    t_PLUS_EQUALS  = r'\+='
+    t_MINUS_EQUALS  = r'-='
+    t_LPAREN  = r'\('
+    t_RPAREN  = r'\)'
+    t_LBRACE  = r'{'
+    t_RBRACE  = r'}'
+    t_LSBRACE  = r'\['
+    t_RSBRACE  = r'\]'
+    t_BOOL_OR  = r'\|\|'
+    t_BOOL_AND  = r'&&'
+    t_LT_EQ  = r'<='
+    t_GT_EQ  = r'>='
+    t_LT  = r'<'
+    t_GT  = r'>'
+    t_EQ  = r'=='
+    t_NOT_EQ  = r'!='
+    t_NOT  = r'!'
+    t_ignore_COMMENT = r'\#.*'
+    t_ignore = " \t\r"
+
+    def t_INTEGER(t):
+        r'-?\d+'
+        t.value = int(t.value)
+        return t
+
+    def t_STRING(t):
+        r'"[^"]*"'
+        # TODO need to handle escape sequences
+        t.value = t.value[1:-1]
+        return t
+
+    def t_IDENTIFIER(t):
+        r'[a-zA-Z_][a-zA-Z_0-9]*'
+        if t.value == 'true':
+            t.value = True
+            t.type = 'BOOL'
+        elif t.value == 'false':
+            t.value = False
+            t.type = 'BOOL'
         else:
-            raise Exception("unknown value: " + repr(e))
-    return e
+            t.type = reserved.get(t.value, 'IDENTIFIER')
+        return t
 
-def parseVariable(e):
-    return Variable(e)
+    # Define a rule so we can track line numbers
+    def t_newline(t):
+        r'\n+'
+        t.lexer.lineno += len(t.value)
 
-def parseOperand(e):
-    if type(e) == ParseResults:
-        if e.getName() == "variable":
-            return parseVariable(e)
-    return parseValue(e)
+    # Error handling rule
+    def t_error(t):
+        print("Illegal character '%s'" % t.value[0])
+        t.lexer.skip(1)
 
-def parseExpression(e):
-    if type(e) == ParseResults:
-        if e.getName() == "operation":
-            if len(e) == 2:
-                return Operation(e[0], parseExpression(e[1]))
-            elif len(e) == 3:
-                return Operation(e[1], parseExpression(e[0]), parseExpression(e[2]))
-            else:
-                raise Exception("expected operation length to be 2 or 3: " + repr(e))
-    return parseOperand(e)
+    lexer = lex.lex()
 
-def parseFunction(e):
-    args = []
-    for arg in e.args:
-        args.append(parseExpression(arg))
-    if e.body == "":
-        body = None
-    else:
-        body = []
-        for statement in e.body:
-            body.append(parseStatement(statement))
-    return Func(e.name[0], args, body)
+    def p_file(p):
+        '''
+        file : statement_list
+        '''
+        p[0] = p[1]
 
-def parseConditional(e):
-    body = []
-    for statement in e.body:
-        body.append(parseStatement(statement))
+    # statements
+    def p_statement(p):
+        '''
+        statement : call
+                  | assignment
+                  | condition
+        '''
+        p[0] = p[1]
 
-    else_body = []
-    if "else_body" not in e or e.else_body == "":
-        else_body = None
-    else:
-        else_body = []
-        for statement in e.else_body:
-            else_body.append(parseStatement(statement))
-    return Conditional(parseExpression(e.condition), body, else_body)
+    def p_assignment(p):
+        '''
+        assignment : IDENTIFIER assign_op expr
+        '''
+        p[0] = Assignment(p[1], p[2], p[3])
 
-def parseStatement(e):
-    if e.getName() == "function":
-        return parseFunction(e)
-    elif e.getName() == "conditional":
-        return parseConditional(e)
-    elif e.getName() == "operation":
-        return parseOperation(e)
-    else:
-        raise Exception("unknown statement: " + repr(e))
+    def p_call(p):
+        'call : IDENTIFIER LPAREN expr_list RPAREN block_or_empty'
+        p[0] = Call(p[1], p[3], p[5])
 
-def parseStatements(e):
-    statements = []
-    for element in e:
-        statements.append(parseStatement(element))
-    return statements
 
-def parseFile(f):
-    return parseStatements(gn_file.parseFile(sys.argv[1], True))
+    def p_condition(p):
+        '''
+        condition : IF LPAREN expr RPAREN block
+        condition : IF LPAREN expr RPAREN block ELSE condition
+        condition : IF LPAREN expr RPAREN block ELSE block
+        '''
+        if len(p) == 8:
+            p[0] = Condition(p[3], p[5], p[7])
+        else:
+            p[0] = Condition(p[3], p[5])
+
+    def p_block(p):
+        '''
+        block : LBRACE statement_list RBRACE
+        block : LBRACE RBRACE
+        '''
+        if len(p) == 4:
+            p[0] = p[2]
+        else:
+            p[0] = []
+
+    def p_block_or_empty(p):
+        '''
+        block_or_empty : block
+                       |
+        '''
+        if len(p) == 1:
+            p[0] = None
+        else:
+            p[0] = p[1]
+
+    def p_statement_list(p):
+        '''
+        statement_list : statement_list statement
+        statement_list : statement
+        '''
+        if len(p) == 2:
+            p[0] = [p[1]]
+        else:
+            p[0] = p[1]
+            p[0].append(p[2])
+
+
+    # expressions
+    def p_expr(p):
+        '''
+        expr : unary_expr
+             | expr binary_op expr
+        '''
+        if len(p) == 2:
+            p[0] = p[1]
+        else:
+            p[0] = (p[2], p[1], p[3])
+
+    def p_unary_expr(p):
+        '''
+        unary_expr : primary_expr
+                   | unary_op unary_expr
+        '''
+        if len(p) == 2:
+            p[0] = p[1]
+        else:
+            p[0] = (p[1], p[2])
+
+
+    def p_primary_expr(p):
+        '''primary_expr : IDENTIFIER
+                | INTEGER
+                | STRING
+                | BOOL
+                | call
+                | LPAREN expr RPAREN
+                | array '''
+        p[0] = p[1]
+    def p_array(p):
+        '''
+        array : LSBRACE expr_list RSBRACE
+        array : LSBRACE expr_list COMMA RSBRACE
+        array : LSBRACE RSBRACE
+        '''
+        if len(p) == 3:
+            p[0] = []
+        else:
+            p[0] = p[2]
+
+
+    def p_expr_list(p):
+        '''
+        expr_list : expr_list COMMA expr
+        expr_list : expr
+        '''
+        if len(p) == 2:
+            p[0] = [p[1]]
+        else:
+            p[0] = p[1]
+            p[0].append(p[3])
+
+
+    # operators
+    def p_assign_op(p):
+        '''
+        assign_op : EQUALS
+                  | PLUS_EQUALS
+                  | MINUS_EQUALS
+        '''
+        p[0] = p[1]
+
+    def p_unary_op(p):
+        '''
+        unary_op : NOT
+        '''
+        p[0] = p[1]
+
+    def p_binary_op(p):
+        '''
+        binary_op : PLUS
+                  | MINUS
+                  | GT
+                  | LT
+                  | GT_EQ
+                  | LT_EQ
+                  | EQ
+                  | NOT_EQ
+                  | BOOL_AND
+                  | BOOL_OR
+        '''
+        p[0] = p[1]
+
+    precedence = (
+        ('left', 'PLUS', 'MINUS'),
+        ('left', 'LT', 'LT_EQ', 'GT', 'GT_EQ'),
+        ('left', 'EQ', 'NOT_EQ'),
+        ('left', 'BOOL_AND'),
+        ('left', 'BOOL_OR'),
+        ('right', 'NOT'),
+    )
+
+
+    def p_error(p):
+        print("Syntax error in input!", p)
+
+
+    parser = yacc.yacc()
+    return parser
