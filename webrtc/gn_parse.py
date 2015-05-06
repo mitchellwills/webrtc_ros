@@ -1,46 +1,58 @@
 #!/usr/bin/env python
 
 import sys
-from pyparsing import Word, alphas, restOfLine, OneOrMore, Or, QuotedString, ZeroOrMore, Optional, Group, Literal, delimitedList, Empty, ParseResults, Forward
+from pyparsing import Word, alphas, restOfLine, OneOrMore, Or, QuotedString, ZeroOrMore, Optional, Group, Literal, delimitedList, Empty, ParseResults, Forward, operatorPrecedence, opAssoc,oneOf,NotAny, nums
 
 comment = Literal("#") + restOfLine
 
-variable = Word(alphas+"_")
+variable = Word(alphas+"_", alphas+"_"+nums)
+integer = Word(nums).setParseAction( lambda s,l,t: [ int(t[0]) ] )
 string = QuotedString(quoteChar="\"", escChar="\\")
 
-non_list_value = Or([string])
+value = Forward()
+expression = Forward()
+operand = Or([variable, value])
+list_value = operand # don't include operations cause it slows things down significantly
+
 gn_list = Literal("[").suppress() \
-          + Group(Or([delimitedList(non_list_value, delim=","), ZeroOrMore(non_list_value + Literal(",").suppress())]))("list") \
+         + Group(Or([delimitedList(list_value, delim=","), ZeroOrMore(list_value + Literal(",").suppress())]))("list") \
           + Literal("]").suppress()
-value = Or([non_list_value, gn_list])
+value << Or([integer, string, gn_list])
 
-simple_expression = Or([value, variable])
+operation = operatorPrecedence(operand,
+                               [
+                                   (Literal('!'), 1, opAssoc.RIGHT),
+                                   (oneOf('* /'), 2, opAssoc.LEFT),
+                                   (oneOf('+ -'), 2, opAssoc.LEFT),
+                                   (oneOf(['==','!=','>','<','<=','>=']), 2, opAssoc.LEFT),
+                                   (oneOf(['||','&&']), 2, opAssoc.LEFT),
+                                   (oneOf(['-=','+=','=']), 2, opAssoc.LEFT)
+                               ]
+).setResultsName("operation")
+expression << Or([operation, operand])
 
-comparison = Forward()
-inversion = Literal("!") + simple_expression
-expression = Or([simple_expression, inversion, comparison])
+statementOp = operatorPrecedence(operand,
+                                 [
+                                     (oneOf(['-=','+=','=']), 2, opAssoc.LEFT)
+                                 ]
+                             ).setResultsName("operation")
 
-comparison << Group(simple_expression("expL") + Or([Literal("!="), Literal("=="), Literal("||")])("op") + simple_expression("expR"))("comparison")
-
-operation = Group(variable("variable") +  Or([Literal("-="), Literal("+="), Literal("=")])("op") + value("value"))("operation")
 function = Forward()
 conditional = Forward()
-statement = Or([operation, conditional, function])
+statement = Or([statementOp, conditional, function])
 statements = ZeroOrMore(statement)
 
-conditional_condition = expression
-conditional_body = statements
-conditional << Group(Literal("if").suppress()+Literal("(").suppress()+conditional_condition("condition")+Literal(")").suppress()
-                     + Literal("{").suppress() + conditional_body("body") + Literal("}").suppress()
-                     + Optional(
-                         Literal("else")
-                         + Literal("{").suppress() + conditional_body("else_body") + Literal("}").suppress()
-                     )
+conditional << Group(Literal("if").suppress()+Literal("(").suppress()+expression("condition")+Literal(")").suppress()
+                     + Literal("{").suppress() + statements("body") + Literal("}").suppress()
+                     + Optional(Or([
+                         Literal("else").suppress() + Literal("{").suppress() + statements("else_body") + Literal("}").suppress(),
+                         Literal("else").suppress() + Group(statement)("else_body")
+                     ]))
                  )("conditional")
 
 
 
-function_name = Word(alphas+"_")
+function_name = ~Literal("if") + Word(alphas+"_")
 function_block = statements
 function_arg = expression
 function_args = Group(delimitedList(function_arg ,delim=','))
@@ -49,6 +61,13 @@ function << Group(function_name("name")+Literal("(").suppress()+function_args("a
 
 gn_file = statements.ignore(comment)
 
+def astToString(o, prefix=''):
+    if hasattr(o, "toString"):
+        return o.toString(prefix)
+    elif type(o) is str:
+        return prefix + "\"" + str(o) + "\""
+    else:
+        return prefix + str(o)
 
 class Statement(object):
     def __init__(self, var, op, value):
@@ -57,6 +76,17 @@ class Statement(object):
         self.value = value
     def __repr__(self):
         return "Statement("+str(self.var)+" "+self.op+" "+str(self.value)+")"
+
+class Operation(object):
+    def __init__(self, op, arg1, arg2=None):
+        self.op = op
+        self.arg1 = arg1
+        self.arg2 = arg2
+    def __repr__(self):
+        if self.arg2 is None:
+            return "Operation("+str(self.op)+" "+str(self.arg1) +")"
+        else:
+            return "Operation("+str(self.arg1)+" "+str(self.op)+" "+str(self.arg2) +")"
 
 class Func(object):
     def __init__(self, name, args, body=None):
@@ -68,6 +98,20 @@ class Func(object):
         if self.body is not None:
             s += "{ " + str(self.body) + " }"
         return s
+    def toString(self, prefix):
+        s = prefix + "Func("+self.name+": "+ ", ".join([astToString(arg) for arg in self.args]) +")"
+        if self.body is not None:
+            s += "{\n"
+            for statement in self.body:
+                s += astToString(statement, prefix+"\t") + "\n"
+            s += "}"
+        return s
+
+class Variable(object):
+    def __init__(self, name):
+        self.name = name
+    def __repr__(self):
+        return "Variable("+self.name+")"
 
 class Conditional(object):
     def __init__(self, condition, body, else_body = None):
@@ -79,17 +123,17 @@ class Conditional(object):
         if self.else_body is not None:
             s += "else { " + str(self.else_body) + " }"
         return s
-
-class Comparison(object):
-    def __init__(self, expL, op, expR):
-        self.expL = expL
-        self.op = op
-        self.expR = expR
-    def __repr__(self):
-        return "Comparison("+str(self.expL)+" "+self.op+" "+str(self.expR)+")"
+    def toString(self, prefix):
+        s = prefix + "Condition("+ astToString(self.condition) +")"
+        if self.body is not None:
+            s += "{\n"
+            for statement in self.body:
+                s += astToString(statement, prefix+"\t") + "\n"
+            s += "}"
+        return s
 
 def parseOperation(e):
-    return Statement(e.variable, e.op, parseValue(e.value))
+    return Statement(e.variable, e.op, parseOperand(e.value))
 
 def parseValue(e):
     if type(e) == ParseResults:
@@ -102,35 +146,36 @@ def parseValue(e):
     return e
 
 def parseVariable(e):
-    # TODO
-    return e
+    return Variable(e)
 
-def parseComparison(e):
-    return Comparison(parseExpression(e.expL), e.op, parseExpression(e.expR))
-
-
-def parseExpression(e):
+def parseOperand(e):
     if type(e) == ParseResults:
         if e.getName() == "variable":
             return parseVariable(e)
-        elif e.getName() == "comparison":
-            return parseComparison(e)
-        else:
-            raise Exception("unknown expression: " + repr(e))
-    else:
-        return parseValue(e)
+    return parseValue(e)
+
+def parseExpression(e):
+    if type(e) == ParseResults:
+        if e.getName() == "operation":
+            if len(e) == 2:
+                return Operation(e[0], parseExpression(e[1]))
+            elif len(e) == 3:
+                return Operation(e[1], parseExpression(e[0]), parseExpression(e[2]))
+            else:
+                raise Exception("expected operation length to be 2 or 3: " + repr(e))
+    return parseOperand(e)
 
 def parseFunction(e):
     args = []
     for arg in e.args:
-        args.append(parseValue(arg))
+        args.append(parseExpression(arg))
     if e.body == "":
         body = None
     else:
         body = []
         for statement in e.body:
             body.append(parseStatement(statement))
-    return Func(e.name, args, body)
+    return Func(e.name[0], args, body)
 
 def parseConditional(e):
     body = []
@@ -162,7 +207,5 @@ def parseStatements(e):
         statements.append(parseStatement(element))
     return statements
 
-
-statements = parseStatements(gn_file.parseFile(sys.argv[1]))
-for statement in statements:
-    print statement
+def parseFile(f):
+    return parseStatements(gn_file.parseFile(sys.argv[1], True))
