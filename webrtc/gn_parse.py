@@ -12,6 +12,37 @@ def astToString(o, prefix=''):
     else:
         return prefix + str(o)
 
+class Identifier(object):
+    def __init__(self, name):
+        self.name = name
+    def __repr__(self):
+        return "Identifier("+self.name+")"
+
+class Member(object):
+    def __init__(self, o, name):
+        self.o = o
+        self.name = name
+    def __repr__(self):
+        return "Member("+str(self.o)+", "+self.name+")"
+
+class ArrayIndex(object):
+    def __init__(self, o, index):
+        self.o = o
+        self.index = index
+    def __repr__(self):
+        return "ArrayIndex("+str(self.o)+", "+str(self.index)+")"
+
+class Operation(object):
+    def __init__(self, op, arg1, arg2=None):
+        self.op = op
+        self.arg1 = arg1
+        self.arg2 = arg2
+    def __repr__(self):
+        if self.arg2 is not None:
+            return "Operation("+self.op+", " +str(self.arg1)+", " +str(self.arg2)+ ")"
+        else:
+            return "Operation("+self.op+", " +str(self.arg1)+ ")"
+
 class Assignment(object):
     def __init__(self, var, op, value):
         self.var = var
@@ -58,7 +89,7 @@ class Condition(object):
             s += "}"
         return s
 
-def build_parser():
+def build_parser(start="file"):
     reserved = {
        'if' : 'IF',
        'else' : 'ELSE',
@@ -89,6 +120,7 @@ def build_parser():
         'EQ',
         'NOT_EQ',
         'COMMA',
+        'DOT',
         'NOT',
     ] + list(reserved.values())
 
@@ -104,6 +136,7 @@ def build_parser():
     t_RBRACE  = r'}'
     t_LSBRACE  = r'\['
     t_RSBRACE  = r'\]'
+    t_DOT  = r'\.'
     t_BOOL_OR  = r'\|\|'
     t_BOOL_AND  = r'&&'
     t_LT_EQ  = r'<='
@@ -122,9 +155,9 @@ def build_parser():
         return t
 
     def t_STRING(t):
-        r'"[^"]*"'
+        r'"(?:[^"\\]|\\.)*"'
         # TODO need to handle escape sequences
-        t.value = t.value[1:-1]
+        t.value = t.value[1:-1].replace('\\"', '"')
         return t
 
     def t_IDENTIFIER(t):
@@ -137,6 +170,7 @@ def build_parser():
             t.type = 'BOOL'
         else:
             t.type = reserved.get(t.value, 'IDENTIFIER')
+            t.value = Identifier(t.value)
         return t
 
     # Define a rule so we can track line numbers
@@ -149,13 +183,17 @@ def build_parser():
         print("Illegal character '%s'" % t.value[0])
         t.lexer.skip(1)
 
-    lexer = lex.lex()
+    lexer = lex.lex(lextab="cache_lex_"+start,debug=False,optimize=1)
 
     def p_file(p):
         '''
         file : statement_list
+        file :
         '''
-        p[0] = p[1]
+        if len(p) == 2:
+            p[0] = p[1]
+        else:
+            p[0] = None
 
     # statements
     def p_statement(p):
@@ -170,11 +208,17 @@ def build_parser():
         '''
         assignment : IDENTIFIER assign_op expr
         '''
-        p[0] = Assignment(p[1], p[2], p[3])
+        p[0] = Assignment(p[1].name, p[2], p[3])
 
     def p_call(p):
-        'call : IDENTIFIER LPAREN expr_list RPAREN block_or_empty'
-        p[0] = Call(p[1], p[3], p[5])
+        '''
+        call : IDENTIFIER LPAREN expr_list RPAREN block_or_empty
+        call : IDENTIFIER LPAREN RPAREN block_or_empty
+        '''
+        if len(p) == 6:
+            p[0] = Call(p[1].name, p[3], p[5])
+        else:
+            p[0] = Call(p[1].name, [], p[4])
 
 
     def p_condition(p):
@@ -224,12 +268,21 @@ def build_parser():
     def p_expr(p):
         '''
         expr : unary_expr
-             | expr binary_op expr
+             | expr PLUS expr
+             | expr MINUS expr
+             | expr GT expr
+             | expr LT expr
+             | expr GT_EQ expr
+             | expr LT_EQ expr
+             | expr EQ expr
+             | expr NOT_EQ expr
+             | expr BOOL_AND expr
+             | expr BOOL_OR expr
         '''
         if len(p) == 2:
             p[0] = p[1]
         else:
-            p[0] = (p[2], p[1], p[3])
+            p[0] = Operation(p[2], p[1], p[3])
 
     def p_unary_expr(p):
         '''
@@ -239,7 +292,7 @@ def build_parser():
         if len(p) == 2:
             p[0] = p[1]
         else:
-            p[0] = (p[1], p[2])
+            p[0] = Operation(p[1], p[2])
 
 
     def p_primary_expr(p):
@@ -250,7 +303,17 @@ def build_parser():
                 | call
                 | LPAREN expr RPAREN
                 | array '''
-        p[0] = p[1]
+        if len(p) == 4:
+            p[0] = p[2]
+        else:
+            p[0] = p[1]
+    def p_primary_expr_member(p):
+        '''primary_expr : IDENTIFIER DOT IDENTIFIER'''
+        p[0] = Member(p[1], p[3].name)
+    def p_primary_expr_array_index(p):
+        '''primary_expr : IDENTIFIER LSBRACE expr RSBRACE'''
+        p[0] = ArrayIndex(p[1], p[3])
+
     def p_array(p):
         '''
         array : LSBRACE expr_list RSBRACE
@@ -290,34 +353,18 @@ def build_parser():
         '''
         p[0] = p[1]
 
-    def p_binary_op(p):
-        '''
-        binary_op : PLUS
-                  | MINUS
-                  | GT
-                  | LT
-                  | GT_EQ
-                  | LT_EQ
-                  | EQ
-                  | NOT_EQ
-                  | BOOL_AND
-                  | BOOL_OR
-        '''
-        p[0] = p[1]
-
     precedence = (
-        ('left', 'PLUS', 'MINUS'),
-        ('left', 'LT', 'LT_EQ', 'GT', 'GT_EQ'),
-        ('left', 'EQ', 'NOT_EQ'),
-        ('left', 'BOOL_AND'),
-        ('left', 'BOOL_OR'),
         ('right', 'NOT'),
+        ('left', 'BOOL_OR'),
+        ('left', 'BOOL_AND'),
+        ('left', 'EQ', 'NOT_EQ'),
+        ('left', 'LT', 'LT_EQ', 'GT', 'GT_EQ'),
+        ('left', 'PLUS', 'MINUS'),
     )
-
 
     def p_error(p):
         print("Syntax error in input!", p)
 
 
-    parser = yacc.yacc()
+    parser = yacc.yacc(tabmodule="cache_yacc_"+start,debug=False)
     return parser
