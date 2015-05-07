@@ -92,8 +92,7 @@ def func_exec_script(args, body, scope):
     filename = args[0]
     arguments = [] if len(args) < 2 else args[1]
     input_conversion = "" if len(args) < 3 else args[2]
-    if len(args) > 3:
-        print "!!!!More arguments specified to exec_script: " + str(args)
+    file_dependencies = [] if len(args) < 4 else args[3]
 
     command = ["python", scope.resolvePath(filename)] + arguments
     if input_conversion == "":
@@ -483,8 +482,11 @@ def eval(statement, scope):
     if type(statement) is gn_parse.ArrayIndex:
         return eval(statement.o, scope)[statement.index]
 
-    if type(statement) is bool or type(statement) is int or type(statement) is list:
+    if type(statement) is bool or type(statement) is int:
         return statement
+
+    if type(statement) is list:
+        return map(lambda item: eval(item, scope), statement)
 
     if type(statement) is str:
         find = re.compile(r'\$([a-zA-Z_][a-zA-Z_0-9]*)')
@@ -499,7 +501,7 @@ def evalFile(f, scope):
     parser = gn_parse.build_parser()
 
     scope = FileScope(scope, f)
-    print "Loading: ", f
+    #print "Loading: ", f
     statements = parser.parse(file(f).read())
 
     if statements is not None:
@@ -516,6 +518,8 @@ root_dirs = ["/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/",
              "/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/shim"]
 global_scope = GlobalScope(root_dirs)
 global_scope.set("root_build_dir" , "/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/build")
+global_scope.set("root_gen_dir" , "/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/gen")
+
 global_scope.set("build_with_chromium" , False)
 global_scope.set("use_openssl" , True)
 
@@ -578,9 +582,6 @@ resolveTarget(global_scope.get("current_toolchain"), global_scope)
 
 resolveTarget(os.path.abspath(sys.argv[1]), global_scope)
 
-#for (target_name, target) in result.iteritems():
-#    print target.type, target_name
-#    deps = target.scope.get("deps") if target.scope.has("deps") else []
-#    for dep in deps:
-#        print "\t"+dep+" -> " + str(resolveTarget(dep, file_scope)[0])
 
+for arg in global_scope.default_args:
+    print arg, "=", global_scope.get(arg)

@@ -183,7 +183,7 @@ def build_parser(start="file"):
         print("Illegal character '%s'" % t.value[0])
         t.lexer.skip(1)
 
-    lexer = lex.lex(lextab="cache_lex_"+start,debug=False,optimize=1)
+    lexer = lex.lex(lextab="cache_lex",debug=False,optimize=1)
 
     def p_file(p):
         '''
