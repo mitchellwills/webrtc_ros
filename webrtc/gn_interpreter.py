@@ -5,14 +5,15 @@ import sys
 import os
 import re
 import subprocess
+import itertools
 
-class Target:
+class TargetDefinition:
     def __init__(self, type, scope):
         self.type = type
         self.scope = scope
 
     def __repr__(self):
-        return "Target("+self.type+", "+str(self.scope)+")"
+        return "TargetDefinition("+self.type+", "+str(self.scope)+")"
 
 def no_eval_args(func):
     func.no_eval_args = True
@@ -120,7 +121,7 @@ def func_toolchain(args, body, scope):
     for statement in body:
         eval(statement, toolchain_scope)
 
-    scope.declareTarget(name, Target("toolchain", toolchain_scope))
+    scope.declareTarget(name, TargetDefinition("toolchain", toolchain_scope))
 
     return None
 
@@ -138,7 +139,7 @@ def func_tool(args, body, scope):
     for statement in body:
         eval(statement, tool_scope)
 
-    scope.declareTarget(name, Target("tool", tool_scope))
+    scope.declareTarget(name, TargetDefinition("tool", tool_scope))
 
     return None
 
@@ -149,11 +150,17 @@ def func_source_set(args, body, scope):
     source_set_scope = Scope(scope)
     source_set_scope.set('configs', [])
     source_set_scope.set('sources', [])
+    source_set_scope.set('include_dirs', [])
     source_set_scope.set('deps', [])
     for statement in body:
         eval(statement, source_set_scope)
 
-    scope.declareTarget(name, Target("source_set", source_set_scope))
+    sources = source_set_scope.get('sources')
+    sources[:] = map(lambda f: scope.resolvePath(f, isFile=False), sources) # todo should theoretically care that they are a file, but some names are bad
+    include_dirs = source_set_scope.get('include_dirs')
+    include_dirs[:] = map(lambda f: scope.resolvePath(f, isFile=False), include_dirs) # todo should theoretically care that they are a file, but some names are bad
+
+    scope.declareTarget(name, TargetDefinition("source_set", source_set_scope))
 
     return None
 
@@ -162,11 +169,17 @@ def func_static_library(args, body, scope):
     static_library_scope = Scope(scope)
     static_library_scope.set('configs', [])
     static_library_scope.set('sources', [])
+    static_library_scope.set('include_dirs', [])
     static_library_scope.set('deps', [])
     for statement in body:
         eval(statement, static_library_scope)
 
-    scope.declareTarget(name, Target("static_library", static_library_scope))
+    sources = static_library_scope.get('sources')
+    sources[:] = map(lambda f: scope.resolvePath(f, isFile=False), sources) # todo should theoretically care that they are a file, but some names are bad
+    include_dirs = static_library_scope.get('include_dirs')
+    include_dirs[:] = map(lambda f: scope.resolvePath(f, isFile=False), include_dirs) # todo should theoretically care that they are a file, but some names are bad
+
+    scope.declareTarget(name, TargetDefinition("static_library", static_library_scope))
 
     return None
 
@@ -175,11 +188,31 @@ def func_executable(args, body, scope):
     executable_scope = Scope(scope)
     executable_scope.set('configs', [])
     executable_scope.set('sources', [])
+    executable_scope.set('include_dirs', [])
     executable_scope.set('deps', [])
     for statement in body:
         eval(statement, executable_scope)
 
-    scope.declareTarget(name, Target("executable", executable_scope))
+    sources = executable_scope.get('sources')
+    sources[:] = map(lambda f: scope.resolvePath(f, isFile=False), sources) # todo should theoretically care that they are a file, but some names are bad
+    include_dirs = executable_scope.get('include_dirs')
+    include_dirs[:] = map(lambda f: scope.resolvePath(f, isFile=False), include_dirs) # todo should theoretically care that they are a file, but some names are bad
+
+    scope.declareTarget(name, TargetDefinition("executable", executable_scope))
+
+    return None
+
+def func_config(args, body, scope):
+    name = args[0]
+    config_scope = Scope(scope)
+    config_scope.set('include_dirs', [])
+    for statement in body:
+        eval(statement, config_scope)
+
+    include_dirs = config_scope.get('include_dirs')
+    include_dirs[:] = map(lambda f: scope.resolvePath(f, isFile=False), include_dirs) # todo should theoretically care that they are a file, but some names are bad
+
+    scope.declareTarget(name, TargetDefinition("config", config_scope))
 
     return None
 
@@ -190,17 +223,7 @@ def func_group(args, body, scope):
     for statement in body:
         eval(statement, group_scope)
 
-    scope.declareTarget(name, Target("group", group_scope))
-
-    return None
-
-def func_config(args, body, scope):
-    name = args[0]
-    group_scope = Scope(scope)
-    for statement in body:
-        eval(statement, group_scope)
-
-    scope.declareTarget(name, Target("config", group_scope))
+    scope.declareTarget(name, TargetDefinition("group", group_scope))
 
     return None
 
@@ -209,7 +232,8 @@ def func_set_sources_assignment_filter(args, body, scope):
     return None
 
 def func_set_defaults(args, body, scope):
-    print "!!!!set_defaults not implemented"
+    target_type = args[0]
+    print "!!!!set_defaults not implemented: " + target_type
     return None
 
 
@@ -344,17 +368,15 @@ class GlobalScope(Scope):
         self.default_args = dict()
 
         self.default_args['os'] = "linux"
+        self.default_args['cpu_arch'] = "x64"
+
         self.default_args['host_os'] = "linux"
         self.default_args['host_cpu'] = "x64"
         self.default_args['current_os'] = "linux"
         self.default_args['current_cpu'] = "x64"
         self.default_args['target_os'] = "linux"
         self.default_args['target_cpu'] = "x64"
-
         self.default_args['build_cpu_arch'] = "x64"
-        self.default_args['cpu_arch'] = "x64"
-
-        self.set("is_clang", False)
 
     def global_scope(self):
         return self
@@ -515,27 +537,93 @@ def evalFile(f, scope):
 # Initialize global scope
 root_dirs = ["/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/",
              "/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/chromium_src/",
+             "/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/yuv_src/",
              "/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/shim"]
 global_scope = GlobalScope(root_dirs)
-global_scope.set("root_build_dir" , "/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/build")
-global_scope.set("root_gen_dir" , "/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/gen")
-
-global_scope.set("build_with_chromium" , False)
-global_scope.set("use_openssl" , True)
 
 evalFile(global_scope.resolvePath("//build/config/BUILDCONFIG.gn"), global_scope)
 
+evalFile(global_scope.resolvePath("//webrtc_ros/config.gni"), global_scope)
 
 # load toolchain
 if not global_scope.has("current_toolchain"):
     global_scope.set("current_toolchain", global_scope.get("default_toolchain"))
 
+# based on http://www.peterbe.com/plog/uniqifiers-benchmark
+def uniquify(seq):
+    seen = set()
+    return [x for x in seq if x not in seen and not seen.add(x)]
 
 
+class Target:
+    def __init__(self, type, properties, public_deps):
+        self.type = type
+        self.properties = properties
+        self.public_deps = public_deps
+
+    def __repr__(self):
+        return "Target("+self.type+")"
+
+def bfs_list(root, expandFunc):
+    queue = list(root)
+    result = []
+    while queue:
+        item = queue.pop(0)
+        result.append(item)
+        queue.extend(expandFunc(item))
+    return result
+
+config_keys = ["cflags", "cflags_c", "cflags_cc", "cflags_objc", "cflags_objcc", "defines", "include_dirs", "ldflags", "lib_dirs", "libs"]
+configurable_types = ["static_library", "source_set", "config", "executable"]
+inheritable_configurable_types = ["source_set", "config"]
+source_types = ["static_library", "source_set", "executable"]
+def buildTarget(target, resolved_deps, verbose=False):
+    private_deps = list(itertools.chain(*resolved_deps.values()))
+    initial_public_deps = list(itertools.chain(*map(lambda t: t[1].public_deps, private_deps)))
+    public_deps = uniquify(bfs_list(initial_public_deps, lambda t: t[1].public_deps))
+    all_deps = public_deps + private_deps
+
+    properties = {"sources": [], "link": []}
+
+    if target.scope.has("sources"):
+        properties["sources"].extend(target.scope.get("sources"))
+
+    if target.type in configurable_types:
+        for key in config_keys:
+            properties[key] = []
+            if target.scope.has(key):
+                properties[key].extend(target.scope.get(key))
+
+    if target.type in source_types:
+        for dep in all_deps:
+            dep_name = dep[0]
+            dep_target = dep[1]
+
+            if dep_target.type == "source_set":
+                if "sources" in dep_target.properties:
+                    properties["sources"].extend(dep_target.properties["sources"])
+            if dep_target.type == "static_library":
+                properties["link"].append(dep_name)
+
+    if target.type in inheritable_configurable_types:
+        for dep in all_deps:
+            dep_name = dep[0]
+            dep_target = dep[1]
+
+            if dep_target.type in configurable_types:
+                for key in config_keys:
+                    if key in dep_target.properties:
+                        properties[key].extend(dep_target.properties[key])
+
+    properties["sources"] = uniquify(properties["sources"])
+
+    if target.type in configurable_types:
+        for key in config_keys:
+            properties[key] = uniquify(properties[key])
+
+    return Target(target.type, properties, list(itertools.chain(resolved_deps["public_configs"], resolved_deps["public_deps"])))
 
 target_cache = dict()
-
-
 def resolveTarget(name, resolve_scope):
     s = name.split(':')
     if len(s) == 1:
@@ -549,39 +637,63 @@ def resolveTarget(name, resolve_scope):
 
     file_path = resolve_scope.resolvePath(filename, buildFile=True)
 
-    if file_path in target_cache:
-        if target_name == "":
-            return target_cache.get(file_path)
-        else:
-            return target_cache.get(file_path).get(target_name)
 
     scope = Scope(global_scope)
     file_scope = evalFile(file_path, scope)
 
-    target_cache[file_path] = scope.targets
+    if file_path not in target_cache:
+        target_cache[file_path] = {}
 
-    for (file_target_name, file_target) in scope.targets.iteritems():
-        print file_target.type, file_path, file_target_name
-        for dep_key in ["deps", "data_deps", "public_deps", "configs", "public_configs"]:
-            deps = file_target.scope.get(dep_key) if file_target.scope.has(dep_key) else []
-            for dep in deps:
-                resolveTarget(dep, file_scope)
+    for file_target_name in scope.targets:
+        if target_name == "" or file_target_name == target_name:
+            if file_target_name not in target_cache[file_path]:
+                file_target = scope.targets[file_target_name]
+                resolved_deps = {}
+                for dep_key in ["deps", "public_deps", "data_deps", "configs", "public_configs"]:
+                    deps = file_target.scope.get(dep_key) if file_target.scope.has(dep_key) else []
+                    resolved_deps[dep_key] = []
+                    for dep in deps:
+                        resolved = resolveTarget(dep, file_scope)
+                        if type(resolved) is list:
+                            resolved_deps[dep_key].extend(resolved)
+                        else:
+                            resolved_deps[dep_key].append(resolved)
+                print file_target.type, file_path, file_target_name
+                if "webrtc/BUILD" in file_path:
+                    target_cache[file_path][file_target_name] = buildTarget(file_target, resolved_deps, True)
+                else:
+                    target_cache[file_path][file_target_name] = buildTarget(file_target, resolved_deps)
 
     if target_name == "":
-        return scope.targets
+        return map(lambda (name, target): (file_path+":"+name, target), target_cache[file_path].iteritems())
     else:
-        if target_name not in scope.targets:
+        if target_name not in target_cache[file_path]:
             raise Exception("Resolved file: " + file_path + ", but did not find target: " + target_name)
-        return scope.targets[target_name]
-
-
+        return (file_path+":"+target_name, target_cache[file_path][target_name])
 
 
 resolveTarget(global_scope.get("current_toolchain"), global_scope)
 
 
-resolveTarget(os.path.abspath(sys.argv[1]), global_scope)
+webrtc_target = resolveTarget(sys.argv[1], global_scope)
 
+if type(webrtc_target) is not list:
+    webrtc_target = [webrtc_target]
 
-for arg in global_scope.default_args:
-    print arg, "=", global_scope.get(arg)
+for target in webrtc_target:
+    print target[0] + " ("+target[1].type+")"
+    #for source in target[1][1]["sources"]:
+    #print "\t" + source
+    print "\tSources: " + str(len(target[1].properties["sources"]))
+
+    for key in config_keys:
+        if key in target[1].properties:
+            print "\t"+key+": " + str(target[1].properties[key])
+
+    print "\n\tLINK:"
+    for link in target[1].properties["link"]:
+        print "\t"+link
+    print "\n\n\n"
+
+#for arg in global_scope.default_args:
+#    print arg, "=", global_scope.get(arg)

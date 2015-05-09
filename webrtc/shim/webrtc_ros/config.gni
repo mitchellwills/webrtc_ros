@@ -1,0 +1,11 @@
+root_build_dir = "/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/build"
+root_gen_dir = "/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/gen"
+
+build_with_chromium = false
+use_openssl = true
+
+rtc_build_json = false
+rtc_jsoncpp_root = "/usr/include"
+
+is_clang = false
+rtc_enable_protobuf = false
