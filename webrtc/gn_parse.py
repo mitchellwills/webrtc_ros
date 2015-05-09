@@ -156,8 +156,8 @@ def build_parser(start="file"):
 
     def t_STRING(t):
         r'"(?:[^"\\]|\\.)*"'
-        # TODO need to handle escape sequences
-        t.value = t.value[1:-1].replace('\\"', '"')
+        # will worry about escape sequences later
+        t.value = t.value[1:-1]
         return t
 
     def t_IDENTIFIER(t):

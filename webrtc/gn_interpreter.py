@@ -6,6 +6,37 @@ import os
 import re
 import subprocess
 import itertools
+import traceback
+import copy
+
+def print_exc_plus():
+    """
+    Print the usual traceback information, followed by a listing of all the
+    local variables in each frame.
+    """
+    tb = sys.exc_info()[2]
+    while 1:
+        if not tb.tb_next:
+            break
+        tb = tb.tb_next
+    stack = []
+    f = tb.tb_frame
+    while f:
+        stack.append(f)
+        f = f.f_back
+    stack.reverse()
+    traceback.print_exc()
+    print "Locals by frame, innermost last"
+    for frame in stack:
+        print
+        print "Frame %s in %s at line %s" % (frame.f_code.co_name,
+                                             frame.f_code.co_filename,
+                                             frame.f_lineno)
+        if frame.f_code.co_name == "resolveTarget":
+            if "file_scope" in frame.f_locals:
+                print "\tresolving " + frame.f_locals["name"] + " in " + frame.f_locals["file_scope"].path
+            else:
+                print "\tresolving " + frame.f_locals["name"]
 
 class TargetDefinition:
     def __init__(self, type, scope):
@@ -18,6 +49,10 @@ class TargetDefinition:
 def no_eval_args(func):
     func.no_eval_args = True
     return func
+
+def copyDefaults(name, s):
+    if name in s.global_scope().defaults:
+        s.copyFrom(s.global_scope().defaults[name])
 
 def func_import(args, body, scope):
     file_name = scope.resolvePath(args[0])
@@ -63,6 +98,7 @@ def func_template(declaration_args, template_body, declaration_scope):
     def template_func(args, body, scope):
         target_name = args[0]
         call_body_scope = Scope(scope)
+        copyDefaults(name, call_body_scope)
         for statement in body:
             eval(statement, call_body_scope)
 
@@ -152,6 +188,7 @@ def func_source_set(args, body, scope):
     source_set_scope.set('sources', [])
     source_set_scope.set('include_dirs', [])
     source_set_scope.set('deps', [])
+    copyDefaults("source_set", source_set_scope)
     for statement in body:
         eval(statement, source_set_scope)
 
@@ -171,6 +208,7 @@ def func_static_library(args, body, scope):
     static_library_scope.set('sources', [])
     static_library_scope.set('include_dirs', [])
     static_library_scope.set('deps', [])
+    copyDefaults("static_library", static_library_scope)
     for statement in body:
         eval(statement, static_library_scope)
 
@@ -190,6 +228,7 @@ def func_executable(args, body, scope):
     executable_scope.set('sources', [])
     executable_scope.set('include_dirs', [])
     executable_scope.set('deps', [])
+    copyDefaults("executable", executable_scope)
     for statement in body:
         eval(statement, executable_scope)
 
@@ -206,6 +245,7 @@ def func_config(args, body, scope):
     name = args[0]
     config_scope = Scope(scope)
     config_scope.set('include_dirs', [])
+    copyDefaults("config", config_scope)
     for statement in body:
         eval(statement, config_scope)
 
@@ -219,6 +259,7 @@ def func_config(args, body, scope):
 def func_group(args, body, scope):
     name = args[0]
     group_scope = Scope(scope)
+    copyDefaults("group", group_scope)
     group_scope.set('deps', [])
     for statement in body:
         eval(statement, group_scope)
@@ -233,7 +274,11 @@ def func_set_sources_assignment_filter(args, body, scope):
 
 def func_set_defaults(args, body, scope):
     target_type = args[0]
-    print "!!!!set_defaults not implemented: " + target_type
+    defaults_scope = Scope(scope)
+    for statement in body:
+        eval(statement, defaults_scope)
+
+    scope.global_scope().defaults[target_type] = defaults_scope
     return None
 
 
@@ -268,6 +313,9 @@ class Scope(object):
             return self.templates[name]
         else:
             return None
+
+    def copyFrom(self, other):
+        self.values.update(copy.deepcopy(other.values))
 
     def has(self, name):
         if name in self.values:
@@ -365,6 +413,7 @@ class GlobalScope(Scope):
         super(GlobalScope, self).__init__(None)
 
         self.root_dirs = root_dirs
+        self.defaults = dict()
         self.default_args = dict()
 
         self.default_args['os'] = "linux"
@@ -511,20 +560,30 @@ def eval(statement, scope):
         return map(lambda item: eval(item, scope), statement)
 
     if type(statement) is str:
-        find = re.compile(r'\$([a-zA-Z_][a-zA-Z_0-9]*)')
+        find = re.compile(r'(?<!\\)\$(?:(?:([a-zA-Z_][a-zA-Z_0-9]*))|(?:\{([a-zA-Z_][a-zA-Z_0-9]*)\}))')
         def id_resolver(match):
-            return scope.get(match.group(1))
-        return find.sub(id_resolver, statement)
+            id = match.group(1)
+            if id is None:
+                id = match.group(2)
+            return str(scope.get(id))
+        out = find.sub(id_resolver, statement).replace('\\"', '"').replace('\\\\', '\\').replace('\\$', '$')
+        #print statement, "->", out
+        return out
 
-    print "eval", type(statement), statement
+    print "!!!!!Unknown statement type", type(statement), statement
     return None
+
+parsed_files = dict()
 
 def evalFile(f, scope):
     parser = gn_parse.build_parser()
 
     scope = FileScope(scope, f)
-    #print "Loading: ", f
-    statements = parser.parse(file(f).read())
+    if f not in parsed_files:
+        print "Parsing: ", f
+        statements = parsed_files[f] = parser.parse(file(f).read())
+    else:
+        statements = parsed_files[f]
 
     if statements is not None:
         for statement in statements:
@@ -623,6 +682,7 @@ def buildTarget(target, resolved_deps, verbose=False):
 
     return Target(target.type, properties, list(itertools.chain(resolved_deps["public_configs"], resolved_deps["public_deps"])))
 
+file_eval_cache = dict() # cache of files resolved in root scope
 target_cache = dict()
 def resolveTarget(name, resolve_scope):
     s = name.split(':')
@@ -637,9 +697,12 @@ def resolveTarget(name, resolve_scope):
 
     file_path = resolve_scope.resolvePath(filename, buildFile=True)
 
-
-    scope = Scope(global_scope)
-    file_scope = evalFile(file_path, scope)
+    if file_path not in file_eval_cache:
+        scope = Scope(global_scope)
+        file_scope = evalFile(file_path, scope)
+        file_eval_cache[file_path] = (file_scope, scope)
+    else:
+        file_scope, scope = file_eval_cache[file_path]
 
     if file_path not in target_cache:
         target_cache[file_path] = {}
@@ -675,25 +738,34 @@ def resolveTarget(name, resolve_scope):
 resolveTarget(global_scope.get("current_toolchain"), global_scope)
 
 
-webrtc_target = resolveTarget(sys.argv[1], global_scope)
 
-if type(webrtc_target) is not list:
-    webrtc_target = [webrtc_target]
+try:
+    webrtc_target = resolveTarget(sys.argv[1], global_scope)
 
-for target in webrtc_target:
-    print target[0] + " ("+target[1].type+")"
-    #for source in target[1][1]["sources"]:
-    #print "\t" + source
-    print "\tSources: " + str(len(target[1].properties["sources"]))
+    print
+    print
 
-    for key in config_keys:
-        if key in target[1].properties:
-            print "\t"+key+": " + str(target[1].properties[key])
+    if type(webrtc_target) is not list:
+        webrtc_target = [webrtc_target]
 
-    print "\n\tLINK:"
-    for link in target[1].properties["link"]:
-        print "\t"+link
-    print "\n\n\n"
+    for target in webrtc_target:
+        print target[0] + " ("+target[1].type+")"
+        #for source in target[1][1]["sources"]:
+        #print "\t" + source
+        print "\tSources: " + str(len(target[1].properties["sources"]))
 
-#for arg in global_scope.default_args:
-#    print arg, "=", global_scope.get(arg)
+        for key in config_keys:
+            if key in target[1].properties:
+                print "\t"+key+": " + str(target[1].properties[key])
+
+        print "\n\tLINK:"
+        for link in target[1].properties["link"]:
+            print "\t"+link
+        print "\n\n\n"
+
+    #for arg in global_scope.default_args:
+    #    print arg, "=", global_scope.get(arg)
+
+except:
+    print_exc_plus()
+
