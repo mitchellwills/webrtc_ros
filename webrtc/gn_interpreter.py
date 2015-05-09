@@ -180,6 +180,14 @@ def func_tool(args, body, scope):
     return None
 
 
+def filter_sources(scope):
+    if not scope.has("sources"):
+        return
+    filters = scope.get("$sources_assignment_filter")
+    sources = scope.get("sources")
+    def should_keep(item):
+        return all(f.match(item) is None for f in filters)
+    sources[:] = filter(should_keep, sources)
 
 def func_source_set(args, body, scope):
     name = args[0]
@@ -192,6 +200,7 @@ def func_source_set(args, body, scope):
     for statement in body:
         eval(statement, source_set_scope)
 
+    filter_sources(source_set_scope)
     sources = source_set_scope.get('sources')
     sources[:] = map(lambda f: scope.resolvePath(f, isFile=False), sources) # todo should theoretically care that they are a file, but some names are bad
     include_dirs = source_set_scope.get('include_dirs')
@@ -212,6 +221,7 @@ def func_static_library(args, body, scope):
     for statement in body:
         eval(statement, static_library_scope)
 
+    filter_sources(static_library_scope)
     sources = static_library_scope.get('sources')
     sources[:] = map(lambda f: scope.resolvePath(f, isFile=False), sources) # todo should theoretically care that they are a file, but some names are bad
     include_dirs = static_library_scope.get('include_dirs')
@@ -232,6 +242,7 @@ def func_executable(args, body, scope):
     for statement in body:
         eval(statement, executable_scope)
 
+    filter_sources(executable_scope)
     sources = executable_scope.get('sources')
     sources[:] = map(lambda f: scope.resolvePath(f, isFile=False), sources) # todo should theoretically care that they are a file, but some names are bad
     include_dirs = executable_scope.get('include_dirs')
@@ -268,10 +279,6 @@ def func_group(args, body, scope):
 
     return None
 
-def func_set_sources_assignment_filter(args, body, scope):
-    print "!!!!set_sources_assignment_filter not implemented"
-    return None
-
 def func_set_defaults(args, body, scope):
     target_type = args[0]
     defaults_scope = Scope(scope)
@@ -279,6 +286,11 @@ def func_set_defaults(args, body, scope):
         eval(statement, defaults_scope)
 
     scope.global_scope().defaults[target_type] = defaults_scope
+    return None
+
+def func_set_sources_assignment_filter(args, body, scope):
+    filters = map(lambda pattern: re.compile("^"+pattern.replace("*", ".*").replace("\\b", "(?:^|(?:.*/))")+"$"), args[0])
+    scope.set("$sources_assignment_filter", filters)
     return None
 
 
@@ -289,6 +301,7 @@ class Scope(object):
         self.values = dict()
         self.targets = dict()
         self.templates = dict()
+        self.sources_assignement_filter = []
 
     def global_scope(self):
         return self.parent.global_scope()
@@ -600,9 +613,9 @@ root_dirs = ["/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/",
              "/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/shim"]
 global_scope = GlobalScope(root_dirs)
 
-evalFile(global_scope.resolvePath("//build/config/BUILDCONFIG.gn"), global_scope)
-
 evalFile(global_scope.resolvePath("//webrtc_ros/config.gni"), global_scope)
+
+evalFile(global_scope.resolvePath("//build/config/BUILDCONFIG.gn"), global_scope)
 
 # load toolchain
 if not global_scope.has("current_toolchain"):
@@ -750,8 +763,8 @@ try:
 
     for target in webrtc_target:
         print target[0] + " ("+target[1].type+")"
-        #for source in target[1][1]["sources"]:
-        #print "\t" + source
+        #for source in target[1].properties["sources"]:
+        #    print "\t" + source
         print "\tSources: " + str(len(target[1].properties["sources"]))
 
         for key in config_keys:
@@ -765,6 +778,45 @@ try:
 
     #for arg in global_scope.default_args:
     #    print arg, "=", global_scope.get(arg)
+
+
+    build_file = open('CMakeLists.txt', 'w')
+    build_file.write(
+"""cmake_minimum_required(VERSION 2.8.3)
+project(webrtc)
+
+""")
+
+    for target in webrtc_target:
+        if target[1].type == "source_set" or target[1].type == "static_library":
+            build_file.write("set(CMAKE_C_FLAGS \"${CMAKE_C_FLAGS} " + (" ".join(target[1].properties["cflags"] + target[1].properties["cflags_c"]))+"\")\n")
+            build_file.write("set(CMAKE_CXX_FLAGS \"${CMAKE_CXX_FLAGS} " + (" ".join(target[1].properties["cflags"] + target[1].properties["cflags_cc"]))+"\")\n")
+
+            build_file.write("\n\n")
+
+            for define in target[1].properties["defines"]:
+                build_file.write("add_definitions(-D" + define + ")\n")
+
+            build_file.write("\n\n")
+
+            build_file.write("include_directories(\n")
+            for include_dir in target[1].properties["include_dirs"]:
+                build_file.write("\t\"" + include_dir + "\"\n")
+            build_file.write(")\n")
+
+            build_file.write("\n\n")
+
+            library_name = "my_lib"
+            build_file.write("add_library("+library_name+"\n")
+            for source in filter(lambda f: not f.endswith(".h"), target[1].properties["sources"]):
+                build_file.write("\t\"" + source + "\"\n")
+            build_file.write(")\n")
+            build_file.write("target_link_libraries("+library_name+"\n")
+            for lib in target[1].properties["libs"]:
+                build_file.write("\t\"" + lib + "\"\n")
+            build_file.write(")\n")
+
+
 
 except:
     print_exc_plus()

@@ -9,3 +9,4 @@ rtc_jsoncpp_root = "/usr/include"
 
 is_clang = false
 rtc_enable_protobuf = false
+rtc_use_openmax_dl = false

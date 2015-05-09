@@ -1,394 +1,679 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(webrtc)
 
-set(CMAKE_BUILD_TYPE Debug)
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-strict-aliasing -fstack-protector --param=ssp-buffer-size=4 -m64 -march=x86-64 -funwind-tables -fPIC -pipe -pthread -B../webrtc_src/third_party/binutils/Linux_x64/Release/bin -Wall -Wsign-compare -Wendif-labels -Werror -Wno-missing-field-initializers -Wno-unused-parameter -Wno-unused-local-typedefs -fvisibility=hidden -O0 -g2 -gsplit-dwarf -Wextra -Wno-strict-overflow -Wno-uninitialized -msse2")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-strict-aliasing -fstack-protector --param=ssp-buffer-size=4 -m64 -march=x86-64 -funwind-tables -fPIC -pipe -pthread -B../webrtc_src/third_party/binutils/Linux_x64/Release/bin -Wall -Wsign-compare -Wendif-labels -Werror -Wno-missing-field-initializers -Wno-unused-parameter -Wno-unused-local-typedefs -fvisibility=hidden -O0 -g2 -gsplit-dwarf -Wextra -Wno-strict-overflow -Wno-uninitialized -msse2 -Wno-non-virtual-dtor -fno-threadsafe-statics -fvisibility-inlines-hidden -std=gnu++11 -Wno-narrowing -Wno-literal-suffix -fno-rtti -fno-exceptions -Wnon-virtual-dtor -Woverloaded-virtual")
 
-find_package(catkin REQUIRED)
-find_package(EXPAT REQUIRED)
-find_package(Threads REQUIRED)
-find_package(PkgConfig REQUIRED)
-
-pkg_search_module(OPENSSL REQUIRED openssl)
-pkg_check_modules(GTK2 REQUIRED gtk+-2.0)
-pkg_search_module(JSONCPP REQUIRED jsoncpp)
-
-
-execute_process(
-  COMMAND ./checkout_source.sh
-  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/
-)
-
-
-catkin_package(
-  INCLUDE_DIRS
-    "webrtc_src"
-    "yuv_src/include"
-  LIBRARIES webrtc webrtc_usrsctp srtp webrtc_opus yuv webrtc_vpx
-  DEPENDS JSONCPP
-)
-
-add_definitions(-DDEBUG)
-add_definitions(-D_DEBUG)
-
-include_directories(
-  "chromium_src"
-  "webrtc_src"
-  "yuv_src/include"
-  "/usr/include/srtp"
-)
-include_directories(${EXPAT_INCLUDE_DIRS})
-include_directories(${OPENSSL_INCLUDE_DIRS})
-include_directories(${JSONCPP_INCLUDE_DIRS})
-include_directories(${GTK2_INCLUDE_DIRS})
-link_directories(${GTK2_LIBRARY_DIRS})
-add_definitions(${GTK2_CFLAGS_OTHER})
-
-# Enable C++11
-set(CMAKE_CXX_FLAGS "-std=gnu++11 ${CMAKE_CXX_FLAGS}")
-add_definitions(-DPOSIX)
-
-
-
-include_directories("opus_src/include"
-  # WebRTC uses internal APIs
-  "opus_src/celt"
-  "opus_src/src"
-)
-set(LIBOPUS_BUILD_DIRECTORY ${CMAKE_BINARY_DIR}/opus_build/)
-set(LIBOPUS_LIBRARY ${LIBOPUS_BUILD_DIRECTORY}/.libs/libwebrtc_opus.so)
-file(MAKE_DIRECTORY ${LIBOPUS_BUILD_DIRECTORY})
-add_custom_target(build_opus
-  COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/opus_src/configure --enable-custom-modes --disable-doc --disable-extra-programs
-  COMMAND ${CMAKE_MAKE_PROGRAM}
-  WORKING_DIRECTORY ${LIBOPUS_BUILD_DIRECTORY}
-  COMMENT "Build opus")
-
-add_library(webrtc_opus SHARED)
-add_custom_command(TARGET webrtc_opus POST_BUILD COMMAND cp "${LIBOPUS_LIBRARY}" ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libwebrtc_opus.so)
-set_target_properties(webrtc_opus PROPERTIES LINKER_LANGUAGE CXX)
-add_dependencies(webrtc_opus build_opus)
-
-
-
-
-
-
-
-
-file(GLOB_RECURSE YUV_SRCS "yuv_src/source/**.cc")
-foreach(src ${YUV_SRCS})
-endforeach()
-
-add_library(yuv ${YUV_SRCS})
-
-
-
-
-
-
-
-include_directories("usrsctp_src/")
-set(LIBUSRSCTP_BUILD_DIRECTORY ${CMAKE_BINARY_DIR}/usrsctp_build/)
-set(LIBUSRSCTP_LIBRARY ${LIBUSRSCTP_BUILD_DIRECTORY}/usrsctplib/.libs/libwebrtc_usrsctp.so)
-file(MAKE_DIRECTORY ${LIBUSRSCTP_BUILD_DIRECTORY})
-add_custom_target(build_usrsctp
-  COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/usrsctp_src/configure
-  COMMAND ${CMAKE_MAKE_PROGRAM}
-  WORKING_DIRECTORY ${LIBUSRSCTP_BUILD_DIRECTORY}
-  COMMENT "Build usrsctp")
-
-add_library(webrtc_usrsctp SHARED)
-add_custom_command(TARGET webrtc_usrsctp POST_BUILD COMMAND cp "${LIBUSRSCTP_LIBRARY}" ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libwebrtc_usrsctp.so)
-set_target_properties(webrtc_usrsctp PROPERTIES LINKER_LANGUAGE CXX)
-add_dependencies(webrtc_usrsctp build_usrsctp)
-
-
-
-
-
-
-
-
-
-include_directories("libvpx")
-set(LIBVPX_BUILD_DIRECTORY ${CMAKE_BINARY_DIR}/libvpx_build/)
-set(LIBVPX_LIBRARY ${LIBVPX_BUILD_DIRECTORY}/libvpx.so)
-file(MAKE_DIRECTORY ${LIBVPX_BUILD_DIRECTORY})
-add_custom_target(build_libvpx
-  COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/libvpx/configure --disable-examples --disable-docs --enable-shared --disable-unit-tests
-  COMMAND ${CMAKE_MAKE_PROGRAM} SONAME=libwebrtc_vpx.so
-  WORKING_DIRECTORY ${LIBVPX_BUILD_DIRECTORY}
-  COMMENT "Build libvpx")
-
-add_library(webrtc_vpx SHARED)
-add_custom_command(TARGET webrtc_vpx POST_BUILD COMMAND cp "${LIBVPX_LIBRARY}" ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libwebrtc_vpx.so)
-set_target_properties(webrtc_vpx PROPERTIES LINKER_LANGUAGE CXX)
-add_dependencies(webrtc_vpx build_libvpx)
-
-
-
-
-
-
-
-file(GLOB_RECURSE WEBRTC_SRCS "webrtc_src/webrtc/**.cc" "webrtc_src/webrtc/**.c")
-foreach(src ${WEBRTC_SRCS})
-  if(src MATCHES "^${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/test/.*$")
-    list(REMOVE_ITEM WEBRTC_SRCS "${src}")
-  endif(src MATCHES "^${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/test/.*$")
-
-  if(src MATCHES "_unittests?.cc?$")
-    list(REMOVE_ITEM WEBRTC_SRCS "${src}")
-  endif(src MATCHES "_unittests?.cc?$")
-  if(src MATCHES "_unittest_disabled.cc?$")
-    list(REMOVE_ITEM WEBRTC_SRCS "${src}")
-  endif(src MATCHES "_unittest_disabled.cc?$")
-  if(src MATCHES "_test_helper.cc?$")
-    list(REMOVE_ITEM WEBRTC_SRCS "${src}")
-  endif(src MATCHES "_test_helper.cc?$")
-  if(src MATCHES "_unittest_helper.cc?$")
-    list(REMOVE_ITEM WEBRTC_SRCS "${src}")
-  endif(src MATCHES "_unittest_helper.cc?$")
-
-  if(src MATCHES "^${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/build.*$")
-    list(REMOVE_ITEM WEBRTC_SRCS "${src}")
-  endif(src MATCHES "^${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/build.*$")
-
-  if(src MATCHES "^${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/overrides.*$")
-    list(REMOVE_ITEM WEBRTC_SRCS "${src}")
-  endif(src MATCHES "^${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/overrides.*$")
-
-  if(src MATCHES "^${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/examples.*$")
-    list(REMOVE_ITEM WEBRTC_SRCS "${src}")
-  endif(src MATCHES "^${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/examples.*$")
-
-  if(src MATCHES "^${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/libjingle/examples.*$")
-    list(REMOVE_ITEM WEBRTC_SRCS "${src}")
-  endif(src MATCHES "^${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/libjingle/examples.*$")
-
-  if(src MATCHES "^${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/.+/test/.+$")
-    list(REMOVE_ITEM WEBRTC_SRCS "${src}")
-  endif(src MATCHES "^${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/.+/test/.+$")
-  if(src MATCHES "^${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/.+/test_framework/.+$")
-    list(REMOVE_ITEM WEBRTC_SRCS "${src}")
-  endif(src MATCHES "^${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/.+/test_framework/.+$")
-
-  if(src MATCHES "^${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/.*tools.*$")
-    list(REMOVE_ITEM WEBRTC_SRCS "${src}")
-  endif(src MATCHES "^${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/.*tools.*$")
-
-  if(src MATCHES "^${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/.+_tests?.cc?$")
-    list(REMOVE_ITEM WEBRTC_SRCS "${src}")
-  endif(src MATCHES "^${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/.+_tests?.cc?$")
-
-  if(src MATCHES "^${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/.+_win.cc?$")
-    list(REMOVE_ITEM WEBRTC_SRCS "${src}")
-  endif(src MATCHES "^${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/.+_win.cc?$")
-
-  if(src MATCHES "^${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/.+_mips.cc?$")
-    list(REMOVE_ITEM WEBRTC_SRCS "${src}")
-  endif(src MATCHES "^${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/.+_mips.cc?$")
-
-  if(src MATCHES "^${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/.+_neon.cc?$")
-    list(REMOVE_ITEM WEBRTC_SRCS "${src}")
-  endif(src MATCHES "^${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/.+_neon.cc?$")
-
-  if(src MATCHES "^${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/.+_windows_impl.cc?$")
-    list(REMOVE_ITEM WEBRTC_SRCS "${src}")
-  endif(src MATCHES "^${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/.+_windows_impl.cc?$")
-
-
-  if(src MATCHES "^${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/.+_mac.cc?$")
-    list(REMOVE_ITEM WEBRTC_SRCS "${src}")
-  endif(src MATCHES "^${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/.+_mac.cc?$")
-
-  if(src MATCHES "^${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/.+_android.cc?$")
-    list(REMOVE_ITEM WEBRTC_SRCS "${src}")
-  endif(src MATCHES "^${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/.+_android.cc?$")
-
-  if(src MATCHES "^${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/modules/audio_device/android/.*$")
-    list(REMOVE_ITEM WEBRTC_SRCS "${src}")
-  endif(src MATCHES "^${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/modules/audio_device/android/.*$")
-
-  if(src MATCHES "^${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/modules/video_render/windows/.*$")
-    list(REMOVE_ITEM WEBRTC_SRCS "${src}")
-  endif(src MATCHES "^${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/modules/video_render/windows/.*$")
-
-  if(src MATCHES "^${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/modules/video_capture/windows/.*$")
-    list(REMOVE_ITEM WEBRTC_SRCS "${src}")
-  endif(src MATCHES "^${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/modules/video_capture/windows/.*$")
-
-  if(src MATCHES "^${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/modules/desktop_capture/win/.*$")
-    list(REMOVE_ITEM WEBRTC_SRCS "${src}")
-  endif(src MATCHES "^${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/modules/desktop_capture/win/.*$")
-
-  if(src MATCHES "^${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/modules/desktop_capture/mac/.*$")
-    list(REMOVE_ITEM WEBRTC_SRCS "${src}")
-  endif(src MATCHES "^${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/modules/desktop_capture/mac/.*$")
-
-  if(src MATCHES "^${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/modules/video_render/android/.*$")
-    list(REMOVE_ITEM WEBRTC_SRCS "${src}")
-  endif(src MATCHES "^${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/modules/video_render/android/.*$")
-
-  if(src MATCHES "mac[^/]*\\.cc?$")
-    list(REMOVE_ITEM WEBRTC_SRCS "${src}")
-  endif(src MATCHES "mac[^/]*\\.cc?$")
-  if(src MATCHES "win32[^/]*\\.cc?$")
-    list(REMOVE_ITEM WEBRTC_SRCS "${src}")
-  endif(src MATCHES "win32[^/]*\\.cc?$")
-endforeach()
-list(REMOVE_ITEM WEBRTC_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/system_wrappers/source/logcat_trace_context.cc")
-list(REMOVE_ITEM WEBRTC_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/system_wrappers/source/data_log_no_op.cc")
-list(REMOVE_ITEM WEBRTC_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/modules/video_coding/codecs/vp8/vp8_sequence_coder.cc")
-list(REMOVE_ITEM WEBRTC_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/modules/audio_coding/main/acm2/acm_send_test_oldapi.cc")
-list(REMOVE_ITEM WEBRTC_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/modules/audio_coding/main/acm2/acm_receive_test_oldapi.cc")
-list(REMOVE_ITEM WEBRTC_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/modules/audio_coding/main/acm2/audio_coding_module_unittest_oldapi.cc")
-list(REMOVE_ITEM WEBRTC_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/modules/audio_coding/main/acm2/acm_receiver_unittest_oldapi.cc")
-list(REMOVE_ITEM WEBRTC_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/modules/desktop_capture/window_capturer_null.cc")
-list(REMOVE_ITEM WEBRTC_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/modules/desktop_capture/screen_capturer_null.cc")
-list(REMOVE_ITEM WEBRTC_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/modules/desktop_capture/mouse_cursor_monitor_null.cc")
-list(REMOVE_ITEM WEBRTC_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/modules/remote_bitrate_estimator/bwe_simulations.cc")
-list(REMOVE_ITEM WEBRTC_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/modules/video_render/video_render_internal_impl.cc")
-list(REMOVE_ITEM WEBRTC_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/modules/video_capture/external/device_info_external.cc")
-list(REMOVE_ITEM WEBRTC_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/modules/video_capture/external/video_capture_external.cc")
-list(REMOVE_ITEM WEBRTC_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/common_audio/real_fourier.cc")
-list(REMOVE_ITEM WEBRTC_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/common_audio/lapped_transform.cc")
-list(REMOVE_ITEM WEBRTC_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/modules/audio_processing/beamformer/beamformer.cc")
-list(REMOVE_ITEM WEBRTC_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/video/full_stack.cc")
-list(REMOVE_ITEM WEBRTC_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/video/replay.cc")
-list(REMOVE_ITEM WEBRTC_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/video/loopback.cc")
-list(REMOVE_ITEM WEBRTC_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/base/winping.cc")
-list(REMOVE_ITEM WEBRTC_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/base/winfirewall.cc")
-list(REMOVE_ITEM WEBRTC_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/base/diskcache_win32.cc")
-list(REMOVE_ITEM WEBRTC_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/base/schanneladapter.cc")
-list(REMOVE_ITEM WEBRTC_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/webrtc/base/unittest_main.cc")
 
 add_definitions(-DWEBRTC_POSIX)
 add_definitions(-DWEBRTC_LINUX)
-add_definitions(-DWEBRTC_MODULE_UTILITY_VIDEO)
-add_definitions(-DWEBRTC_NS_FLOAT)
-add_definitions(-DWEBRTC_CODEC_OPUS)
-add_definitions(-DWEBRTC_CODEC_GSFMR)
-add_definitions(-DEXPAT_RELATIVE_PATH)
-add_definitions(-DUSE_X11)
-add_definitions(-DSSL_USE_OPENSSL)
 add_definitions(-DFEATURE_ENABLE_SSL)
-add_definitions(-DHAVE_OPENSSL_SSL_H)
-add_definitions(-DLINUX_PULSE)
-add_definitions(-DLINUX_ALSA)
-include_directories(
-  "webrtc_src/webrtc/modules/audio_device/linux/"
-  "webrtc_src/webrtc/system_wrappers/interface/"
-  "webrtc_src/webrtc/common_audio/signal_processing/include"
-  "webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/interface/"
-  "webrtc_src/webrtc/modules/audio_coding/codecs/pcm16b/include/"
-  "webrtc_src/webrtc/modules/audio_coding/codecs/isac/main/interface/"
-  "webrtc_src/webrtc/modules/audio_coding/codecs/g711/include"
-  "webrtc_src/webrtc/modules/audio_coding/codecs/cng/include"
-  "webrtc_src/webrtc/modules/audio_coding/codecs/g722/include"
-)
-
-
-file(GLOB_RECURSE JINGLE_SRCS "webrtc_src/talk/app/**.cc" "webrtc_src/talk/session/**.cc" "webrtc_src/talk/media/**.cc")
-foreach(src ${JINGLE_SRCS})
-  if(src MATCHES "_unittests?.cc?$")
-    list(REMOVE_ITEM JINGLE_SRCS "${src}")
-  endif(src MATCHES "_unittests?.cc?$")
-  if(src MATCHES "_jni.cc?$")
-    list(REMOVE_ITEM JINGLE_SRCS "${src}")
-  endif(src MATCHES "_jni.cc?$")
-  if(src MATCHES "^${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/talk/app/.+/test/.+$")
-    list(REMOVE_ITEM JINGLE_SRCS "${src}")
-  endif(src MATCHES "^${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/talk/app/.+/test/.+$")
-  if(src MATCHES "mac[^/]*\\.cc?$")
-    list(REMOVE_ITEM JINGLE_SRCS "${src}")
-  endif(src MATCHES "mac[^/]*\\.cc?$")
-  if(src MATCHES "win32[^/]*\\.cc?$")
-    list(REMOVE_ITEM JINGLE_SRCS "${src}")
-  endif(src MATCHES "win32[^/]*\\.cc?$")
-endforeach()
-list(REMOVE_ITEM JINGLE_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/talk/media/devices/carbonvideorenderer.cc")
-list(REMOVE_ITEM JINGLE_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/talk/media/devices/dummydevicemanager.cc")
-list(REMOVE_ITEM JINGLE_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/talk/media/devices/mobiledevicemanager.cc")
-list(REMOVE_ITEM JINGLE_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/talk/media/webrtc/dummyinstantiation.cc")
-list(REMOVE_ITEM JINGLE_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/talk/media/other/linphonemediaengine.cc")
-list(REMOVE_ITEM JINGLE_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/webrtc_src/talk/media/base/testutils.cc")
-
-add_definitions(-DLINUX)
+add_definitions(-DLOGGING=1)
 add_definitions(-DUSE_WEBRTC_DEV_BRANCH)
-add_definitions(-DHAVE_WEBRTC_VIDEO)
-add_definitions(-DHAVE_WEBRTC_VOICE)
-add_definitions(-DHAVE_SRTP)
-add_definitions(-DSRTP_RELATIVE_PATH)
-add_definitions(-DUSE_SYSTEM_LIBSRTP)
-add_definitions(-DLIBPEERCONNECTION_LIB)
+add_definitions(-DSSL_USE_OPENSSL)
+add_definitions(-DHAVE_OPENSSL_SSL_H)
+add_definitions(-DCHROMIUM_BUILD)
+add_definitions(-DV8_DEPRECATION_WARNINGS)
+add_definitions(-DCLD_VERSION=2)
+add_definitions(-DENABLE_MDNS=1)
+add_definitions(-DENABLE_NOTIFICATIONS)
+add_definitions(-DENABLE_PEPPER_CDMS)
+add_definitions(-DENABLE_PLUGINS=1)
+add_definitions(-DENABLE_PRINTING=1)
+add_definitions(-DENABLE_BASIC_PRINTING=1)
+add_definitions(-DENABLE_PRINT_PREVIEW=1)
+add_definitions(-DENABLE_SPELLCHECK=1)
+add_definitions(-DUSE_UDEV)
+add_definitions(-DTOOLKIT_VIEWS=1)
+add_definitions(-DUI_COMPOSITOR_IMAGE_TRANSPORT)
+add_definitions(-DUSE_ASH=1)
+add_definitions(-DUSE_AURA=1)
+add_definitions(-DUSE_PANGO=1)
+add_definitions(-DUSE_CAIRO=1)
+add_definitions(-DUSE_CLIPBOARD_AURAX11=1)
+add_definitions(-DUSE_DEFAULT_RENDER_THEME=1)
+add_definitions(-DUSE_GLIB=1)
+add_definitions(-DUSE_OPENSSL=1)
+add_definitions(-DUSE_OPENSSL_CERTS=1)
+add_definitions(-DUSE_X11=1)
+add_definitions(-DDISABLE_NACL)
+add_definitions(-DENABLE_EXTENSIONS=1)
+add_definitions(-DENABLE_CONFIGURATION_POLICY)
+add_definitions(-DENABLE_TASK_MANAGER=1)
+add_definitions(-DENABLE_THEMES=1)
+add_definitions(-DENABLE_CAPTIVE_PORTAL_DETECTION=1)
+add_definitions(-DENABLE_SESSION_SERVICE=1)
+add_definitions(-DENABLE_APP_LIST=1)
+add_definitions(-DENABLE_SETTINGS_APP=1)
+add_definitions(-DENABLE_SUPERVISED_USERS=1)
+add_definitions(-DENABLE_SERVICE_DISCOVERY=1)
+add_definitions(-DENABLE_AUTOFILL_DIALOG=1)
+add_definitions(-DENABLE_REMOTING=1)
+add_definitions(-DENABLE_GOOGLE_NOW=1)
+add_definitions(-DENABLE_ONE_CLICK_SIGNIN)
+add_definitions(-DV8_USE_EXTERNAL_STARTUP_DATA)
+add_definitions(-D_FILE_OFFSET_BITS=64)
+add_definitions(-D__STDC_CONSTANT_MACROS)
+add_definitions(-D__STDC_FORMAT_MACROS)
+add_definitions(-D_DEBUG)
+add_definitions(-DDYNAMIC_ANNOTATIONS_ENABLED=1)
+add_definitions(-DWTF_USE_DYNAMIC_ANNOTATIONS=1)
+add_definitions(-D_GLIBCXX_DEBUG=1)
+add_definitions(-DWEBRTC_RESTRICT_LOGGING)
+add_definitions(-DWEBRTC_MODULE_UTILITY_VIDEO)
+add_definitions(-DWEBRTC_EXTERNAL_JSON)
+add_definitions(-DWEBRTC_THREAD_RR)
+add_definitions(-DHAVE_JPEG)
+add_definitions(-DWEBRTC_CODEC_OPUS)
+add_definitions(-DWEBRTC_NS_FLOAT)
+add_definitions(-DWEBRTC_DUMMY_AUDIO_BUILD)
 
-add_library(webrtc ${WEBRTC_SRCS} ${JINGLE_SRCS})
-set_target_properties(webrtc PROPERTIES LINKER_LANGUAGE CXX)
-target_link_libraries(webrtc ${EXPAT_LIBRARIES} webrtc_opus yuv ${CMAKE_THREAD_LIBS_INIT} webrtc_vpx rt dl X11 Xext Xrender Xfixes Xcomposite Xdamage ${OPENSSL_LIBRARIES} ${JSONCPP_LIBRARIES} webrtc_usrsctp srtp gthread-2.0 gobject-2.0 ${GTK2_LIBRARIES})
 
-
-
-
-
-add_executable(peerconnection_server
-  "webrtc_src/talk/examples/peerconnection/server/main.cc"
-  "webrtc_src/talk/examples/peerconnection/server/data_socket.cc"
-  "webrtc_src/talk/examples/peerconnection/server/peer_channel.cc"
-  "webrtc_src/talk/examples/peerconnection/server/utils.cc"
+include_directories(
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/third_party/jsoncpp/overrides/include"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/third_party/jsoncpp/source/include"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_audio/resampler/include"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_audio/signal_processing/include"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_audio/vad/include"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_video/interface"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_video/libyuv/include"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/g711/include"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/interface"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/cng/include"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/red"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/main/interface"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/interface"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/isac/fix/interface"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/isac/main/interface"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/third_party/opus/src/celt"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/third_party/opus/src/src"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/g722/include"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/pcm16b/include"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_conference_mixer/interface"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_device/include"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_device/dummy"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/media_file/interface"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/system_wrappers/interface"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/gen"
+	"/usr/include"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/system_wrappers/source/spreadsortlib"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/yuv_src/third_party/libyuv"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/yuv_src/third_party/libyuv/include"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_device/linux"
 )
-target_link_libraries(peerconnection_server webrtc)
 
-add_executable(peerconnection_client
-  "webrtc_src/talk/examples/peerconnection/client/linux/main.cc"
-  "webrtc_src/talk/examples/peerconnection/client/conductor.cc"
-  "webrtc_src/talk/examples/peerconnection/client/defaults.cc"
-  "webrtc_src/talk/examples/peerconnection/client/linux/main_wnd.cc"
-  "webrtc_src/talk/examples/peerconnection/client/peer_connection_client.cc"
+
+add_library(my_lib
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/config.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_audio/audio_converter.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_audio/audio_util.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_audio/blocker.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_audio/fir_filter.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_audio/resampler/push_resampler.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_audio/resampler/push_sinc_resampler.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_audio/resampler/resampler.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_audio/resampler/sinc_resampler.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_audio/signal_processing/auto_corr_to_refl_coef.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_audio/signal_processing/auto_correlation.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_audio/signal_processing/copy_set_operations.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_audio/signal_processing/cross_correlation.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_audio/signal_processing/division_operations.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_audio/signal_processing/dot_product_with_scale.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_audio/signal_processing/downsample_fast.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_audio/signal_processing/energy.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_audio/signal_processing/filter_ar.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_audio/signal_processing/filter_ma_fast_q12.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_audio/signal_processing/get_hanning_window.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_audio/signal_processing/get_scaling_square.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_audio/signal_processing/ilbc_specific_functions.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_audio/signal_processing/levinson_durbin.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_audio/signal_processing/lpc_to_refl_coef.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_audio/signal_processing/min_max_operations.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_audio/signal_processing/randomization_functions.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_audio/signal_processing/refl_coef_to_lpc.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_audio/signal_processing/real_fft.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_audio/signal_processing/resample.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_audio/signal_processing/resample_48khz.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_audio/signal_processing/resample_by_2.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_audio/signal_processing/resample_by_2_internal.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_audio/signal_processing/resample_fractional.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_audio/signal_processing/spl_init.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_audio/signal_processing/spl_sqrt.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_audio/signal_processing/splitting_filter.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_audio/signal_processing/sqrt_of_one_minus_x_squared.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_audio/signal_processing/vector_scaling_operations.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_audio/vad/vad.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_audio/vad/webrtc_vad.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_audio/vad/vad_core.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_audio/vad/vad_filterbank.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_audio/vad/vad_gmm.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_audio/vad/vad_sp.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_audio/wav_header.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_audio/wav_file.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_audio/window_generator.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_audio/signal_processing/complex_fft.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_audio/signal_processing/complex_bit_reverse.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_audio/signal_processing/filter_ar_fast_q12.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_audio/signal_processing/spl_sqrt_floor.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/system_wrappers/source/field_trial_default.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/system_wrappers/source/metrics_default.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_audio/fir_filter_sse.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_audio/resampler/sinc_resampler_sse.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_video/i420_video_frame.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_video/libyuv/scaler.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_video/libyuv/webrtc_libyuv.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_video/plane.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/common_video/texture_video_frame.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/yuv_src/third_party/libyuv/source/compare.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/yuv_src/third_party/libyuv/source/compare_common.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/yuv_src/third_party/libyuv/source/compare_posix.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/yuv_src/third_party/libyuv/source/convert.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/yuv_src/third_party/libyuv/source/convert_argb.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/yuv_src/third_party/libyuv/source/convert_from.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/yuv_src/third_party/libyuv/source/convert_from_argb.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/yuv_src/third_party/libyuv/source/convert_jpeg.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/yuv_src/third_party/libyuv/source/convert_to_argb.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/yuv_src/third_party/libyuv/source/convert_to_i420.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/yuv_src/third_party/libyuv/source/cpu_id.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/yuv_src/third_party/libyuv/source/format_conversion.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/yuv_src/third_party/libyuv/source/mjpeg_decoder.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/yuv_src/third_party/libyuv/source/mjpeg_validate.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/yuv_src/third_party/libyuv/source/planar_functions.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/yuv_src/third_party/libyuv/source/rotate.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/yuv_src/third_party/libyuv/source/rotate_argb.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/yuv_src/third_party/libyuv/source/rotate_mips.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/yuv_src/third_party/libyuv/source/row_any.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/yuv_src/third_party/libyuv/source/row_common.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/yuv_src/third_party/libyuv/source/row_mips.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/yuv_src/third_party/libyuv/source/row_posix.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/yuv_src/third_party/libyuv/source/scale.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/yuv_src/third_party/libyuv/source/scale_argb.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/yuv_src/third_party/libyuv/source/scale_common.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/yuv_src/third_party/libyuv/source/scale_mips.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/yuv_src/third_party/libyuv/source/scale_posix.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/yuv_src/third_party/libyuv/source/video_common.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/g711/audio_encoder_pcm.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/g711/g711_interface.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/g711/g711.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/audio_encoder.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/audio_encoder_ilbc.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/abs_quant.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/abs_quant_loop.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/augmented_cb_corr.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/bw_expand.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/cb_construct.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/cb_mem_energy_augmentation.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/cb_mem_energy.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/cb_mem_energy_calc.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/cb_search.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/cb_search_core.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/cb_update_best_index.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/chebyshev.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/comp_corr.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/constants.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/create_augmented_vec.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/decode.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/decode_residual.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/decoder_interpolate_lsf.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/do_plc.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/encode.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/energy_inverse.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/enhancer.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/enhancer_interface.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/enh_upsample.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/filtered_cb_vecs.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/frame_classify.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/gain_dequant.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/gain_quant.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/get_cd_vec.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/get_lsp_poly.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/get_sync_seq.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/hp_input.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/hp_output.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/ilbc.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/index_conv_dec.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/index_conv_enc.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/init_decode.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/init_encode.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/interpolate.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/interpolate_samples.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/lpc_encode.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/lsf_check.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/lsf_interpolate_to_poly_dec.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/lsf_interpolate_to_poly_enc.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/lsf_to_lsp.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/lsf_to_poly.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/lsp_to_lsf.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/my_corr.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/nearest_neighbor.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/pack_bits.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/poly_to_lsf.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/poly_to_lsp.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/refiner.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/simple_interpolate_lsf.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/simple_lpc_analysis.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/simple_lsf_dequant.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/simple_lsf_quant.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/smooth.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/smooth_out_data.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/sort_sq.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/split_vq.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/state_construct.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/state_search.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/swap_bytes.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/unpack_bits.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/vq3.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/vq4.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/window32_w32.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/ilbc/xcorr_coef.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/cng/audio_encoder_cng.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/cng/cng_helpfuns.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/cng/webrtc_cng.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/audio_decoder.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/red/audio_encoder_copy_red.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/main/acm2/acm_amr.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/main/acm2/acm_amrwb.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/main/acm2/acm_cng.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/main/acm2/acm_codec_database.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/main/acm2/acm_dtmf_playout.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/main/acm2/acm_g722.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/main/acm2/acm_g7221.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/main/acm2/acm_g7221c.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/main/acm2/acm_g729.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/main/acm2/acm_g7291.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/main/acm2/acm_generic_codec.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/main/acm2/acm_gsmfr.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/main/acm2/acm_ilbc.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/main/acm2/acm_isac.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/main/acm2/acm_opus.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/main/acm2/acm_speex.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/main/acm2/acm_pcm16b.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/main/acm2/acm_pcma.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/main/acm2/acm_pcmu.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/main/acm2/acm_red.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/main/acm2/acm_receiver.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/main/acm2/acm_resampler.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/main/acm2/audio_coding_module.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/main/acm2/audio_coding_module_impl.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/main/acm2/call_statistics.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/main/acm2/initial_delay_manager.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/main/acm2/nack.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/g722/audio_encoder_g722.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/g722/g722_interface.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/g722/g722_encode.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/g722/g722_decode.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/isac/main/source/arith_routines.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/isac/main/source/arith_routines_hist.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/isac/main/source/arith_routines_logist.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/isac/main/source/audio_encoder_isac.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/isac/main/source/bandwidth_estimator.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/isac/main/source/crc.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/isac/main/source/decode_bwe.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/isac/main/source/decode.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/isac/main/source/encode.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/isac/main/source/encode_lpc_swb.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/isac/main/source/entropy_coding.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/isac/main/source/fft.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/isac/main/source/filterbanks.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/isac/main/source/filterbank_tables.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/isac/main/source/filter_functions.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/isac/main/source/intialize.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/isac/main/source/isac.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/isac/main/source/lattice.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/isac/main/source/lpc_analysis.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/isac/main/source/lpc_gain_swb_tables.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/isac/main/source/lpc_shape_swb12_tables.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/isac/main/source/lpc_shape_swb16_tables.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/isac/main/source/lpc_tables.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/isac/main/source/pitch_estimator.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/isac/main/source/pitch_filter.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/isac/main/source/pitch_gain_tables.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/isac/main/source/pitch_lag_tables.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/isac/main/source/spectrum_ar_model_tables.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/isac/main/source/transform.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/isac/fix/source/arith_routines.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/isac/fix/source/arith_routines_hist.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/isac/fix/source/arith_routines_logist.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/isac/fix/source/audio_encoder_isacfix.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/isac/fix/source/bandwidth_estimator.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/isac/fix/source/decode_bwe.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/isac/fix/source/decode.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/isac/fix/source/decode_plc.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/isac/fix/source/encode.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/isac/fix/source/entropy_coding.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/isac/fix/source/fft.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/isac/fix/source/filterbanks.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/isac/fix/source/filterbank_tables.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/isac/fix/source/filters.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/isac/fix/source/initialize.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/isac/fix/source/isacfix.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/isac/fix/source/lattice.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/isac/fix/source/lpc_masking_model.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/isac/fix/source/lpc_tables.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/isac/fix/source/pitch_estimator.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/isac/fix/source/pitch_filter.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/isac/fix/source/pitch_gain_tables.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/isac/fix/source/pitch_lag_tables.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/isac/fix/source/spectrum_ar_model_tables.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/isac/fix/source/transform.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/isac/fix/source/transform_tables.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/isac/fix/source/pitch_filter_c.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/isac/fix/source/pitch_estimator_c.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/isac/fix/source/lattice_c.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/neteq/accelerate.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/neteq/audio_classifier.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/neteq/audio_decoder_impl.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/neteq/audio_multi_vector.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/neteq/audio_vector.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/neteq/background_noise.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/neteq/buffer_level_filter.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/neteq/comfort_noise.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/neteq/decision_logic.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/neteq/decision_logic_fax.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/neteq/decision_logic_normal.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/neteq/decoder_database.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/neteq/delay_manager.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/neteq/delay_peak_detector.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/neteq/dsp_helper.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/neteq/dtmf_buffer.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/neteq/dtmf_tone_generator.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/neteq/expand.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/neteq/merge.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/neteq/neteq_impl.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/neteq/neteq.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/neteq/statistics_calculator.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/neteq/normal.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/neteq/packet_buffer.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/neteq/payload_splitter.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/neteq/post_decode_vad.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/neteq/preemptive_expand.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/neteq/random_vector.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/neteq/rtcp.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/neteq/sync_buffer.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/neteq/timestamp_scaler.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/neteq/time_stretch.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/pcm16b/audio_encoder_pcm16b.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/pcm16b/pcm16b.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/opus/audio_encoder_opus.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_coding/codecs/opus/opus_interface.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_conference_mixer/source/audio_conference_mixer_impl.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_conference_mixer/source/audio_frame_manipulator.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_conference_mixer/source/level_indicator.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_conference_mixer/source/time_scheduler.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_processing/aec/aec_core_sse2.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_processing/aec/aec_rdft_sse2.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_processing/aec/aec_core.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_processing/aec/aec_rdft.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_processing/aec/aec_resampler.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_processing/aec/echo_cancellation.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_processing/aecm/aecm_core.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_processing/aecm/echo_control_mobile.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_processing/agc/agc.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_processing/agc/agc_audio_proc.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_processing/agc/agc_manager_direct.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_processing/agc/circular_buffer.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_processing/agc/gmm.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_processing/agc/histogram.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_processing/agc/legacy/analog_agc.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_processing/agc/legacy/digital_agc.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_processing/agc/pitch_based_vad.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_processing/agc/pitch_internal.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_processing/agc/pole_zero_filter.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_processing/agc/standalone_vad.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_processing/agc/utility.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_processing/audio_buffer.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_processing/audio_processing_impl.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_processing/beamformer/covariance_matrix_generator.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_processing/channel_buffer.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_processing/echo_cancellation_impl.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_processing/echo_control_mobile_impl.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_processing/gain_control_impl.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_processing/high_pass_filter_impl.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_processing/level_estimator_impl.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_processing/noise_suppression_impl.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_processing/processing_component.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_processing/rms_level.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_processing/splitting_filter.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_processing/transient/moving_moments.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_processing/transient/transient_detector.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_processing/transient/transient_suppressor.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_processing/transient/wpd_node.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_processing/transient/wpd_tree.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_processing/typing_detection.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_processing/utility/delay_estimator.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_processing/utility/delay_estimator_wrapper.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_processing/utility/fft4g.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_processing/utility/ring_buffer.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_processing/voice_detection_impl.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_processing/ns/noise_suppression.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_processing/ns/ns_core.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_processing/aecm/aecm_core_c.c"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/utility/source/audio_frame_operations.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/utility/source/coder.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/utility/source/file_player_impl.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/utility/source/file_recorder_impl.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/utility/source/process_thread_impl.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/utility/source/rtp_dump_impl.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/utility/source/frame_scaler.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/utility/source/video_coder.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/utility/source/video_frames_queue.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/media_file/source/avi_file.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/media_file/source/media_file_impl.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/media_file/source/media_file_utility.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/video_coding/main/source/codec_database.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/video_coding/main/source/codec_timer.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/video_coding/main/source/content_metrics_processing.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/video_coding/main/source/decoding_state.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/video_coding/main/source/encoded_frame.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/video_coding/main/source/frame_buffer.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/video_coding/main/source/generic_decoder.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/video_coding/main/source/generic_encoder.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/video_coding/main/source/inter_frame_delay.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/video_coding/main/source/jitter_buffer.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/video_coding/main/source/jitter_estimator.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/video_coding/main/source/media_opt_util.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/video_coding/main/source/media_optimization.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/video_coding/main/source/packet.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/video_coding/main/source/qm_select.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/video_coding/main/source/receiver.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/video_coding/main/source/rtt_filter.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/video_coding/main/source/session_info.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/video_coding/main/source/timestamp_map.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/video_coding/main/source/timing.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/video_coding/main/source/video_coding_impl.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/video_coding/main/source/video_receiver.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/video_coding/main/source/video_sender.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/video_coding/utility/frame_dropper.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/video_coding/utility/quality_scaler.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/video_coding/codecs/i420/main/source/i420.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/video_coding/codecs/vp8/default_temporal_layers.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/video_coding/codecs/vp8/realtime_temporal_layers.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/video_coding/codecs/vp8/reference_picture_selection.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/video_coding/codecs/vp8/screenshare_layers.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/video_coding/codecs/vp8/simulcast_encoder_adapter.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/video_coding/codecs/vp8/vp8_factory.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/video_coding/codecs/vp8/vp8_impl.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/video_coding/codecs/vp9/vp9_impl.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_device/audio_device_buffer.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_device/audio_device_generic.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_device/audio_device_utility.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_device/audio_device_impl.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_device/dummy/audio_device_dummy.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_device/dummy/audio_device_utility_dummy.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_device/dummy/file_audio_device.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/audio_device/dummy/file_audio_device_factory.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/bitrate_controller/bitrate_controller_impl.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/bitrate_controller/remb_suppressor.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/bitrate_controller/send_side_bandwidth_estimation.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/desktop_capture/differ_block_sse2.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/desktop_capture/cropped_desktop_frame.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/desktop_capture/cropping_window_capturer.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/desktop_capture/desktop_and_cursor_composer.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/desktop_capture/desktop_frame.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/desktop_capture/desktop_geometry.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/desktop_capture/desktop_capture_options.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/desktop_capture/desktop_region.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/desktop_capture/differ.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/desktop_capture/differ_block.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/desktop_capture/mouse_cursor.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/desktop_capture/screen_capture_frame_queue.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/desktop_capture/screen_capturer.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/desktop_capture/screen_capturer_helper.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/desktop_capture/shared_desktop_frame.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/desktop_capture/shared_memory.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/desktop_capture/window_capturer.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/desktop_capture/mouse_cursor_monitor_x11.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/desktop_capture/screen_capturer_x11.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/desktop_capture/window_capturer_x11.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/desktop_capture/x11/shared_x_display.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/desktop_capture/x11/x_error_trap.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/desktop_capture/x11/x_server_pixel_buffer.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/rtp_rtcp/source/bitrate.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/rtp_rtcp/source/fec_receiver_impl.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/rtp_rtcp/source/receive_statistics_impl.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/rtp_rtcp/source/remote_ntp_time_estimator.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/rtp_rtcp/source/rtp_header_parser.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/rtp_rtcp/source/rtp_rtcp_impl.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/rtp_rtcp/source/rtcp_packet.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/rtp_rtcp/source/rtcp_receiver.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/rtp_rtcp/source/rtcp_receiver_help.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/rtp_rtcp/source/rtcp_sender.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/rtp_rtcp/source/rtcp_utility.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/rtp_rtcp/source/rtp_header_extension.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/rtp_rtcp/source/rtp_receiver_impl.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/rtp_rtcp/source/rtp_sender.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/rtp_rtcp/source/rtp_utility.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/rtp_rtcp/source/ssrc_database.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/rtp_rtcp/source/tmmbr_help.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/rtp_rtcp/source/dtmf_queue.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/rtp_rtcp/source/rtp_receiver_audio.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/rtp_rtcp/source/rtp_sender_audio.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/rtp_rtcp/source/forward_error_correction.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/rtp_rtcp/source/forward_error_correction_internal.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/rtp_rtcp/source/producer_fec.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/rtp_rtcp/source/rtp_packet_history.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/rtp_rtcp/source/rtp_payload_registry.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/rtp_rtcp/source/rtp_receiver_strategy.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/rtp_rtcp/source/rtp_receiver_video.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/rtp_rtcp/source/rtp_sender_video.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/rtp_rtcp/source/rtp_format.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/rtp_rtcp/source/rtp_format_h264.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/rtp_rtcp/source/rtp_format_vp8.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/rtp_rtcp/source/rtp_format_video_generic.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/rtp_rtcp/source/vp8_partition_aggregator.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/pacing/bitrate_prober.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/pacing/paced_sender.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/remote_bitrate_estimator/rate_statistics.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/remote_bitrate_estimator/aimd_rate_control.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/remote_bitrate_estimator/inter_arrival.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/remote_bitrate_estimator/mimd_rate_control.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/remote_bitrate_estimator/overuse_detector.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/remote_bitrate_estimator/overuse_estimator.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/remote_bitrate_estimator/remote_bitrate_estimator_abs_send_time.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/remote_bitrate_estimator/remote_bitrate_estimator_single_stream.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/remote_bitrate_estimator/remote_rate_control.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/video_capture/linux/device_info_linux.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/video_capture/linux/video_capture_linux.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/video_capture/device_info_impl.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/video_capture/video_capture_factory.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/video_capture/video_capture_impl.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/video_capture/external/device_info_external.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/video_capture/external/video_capture_external.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/video_processing/main/source/brighten.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/video_processing/main/source/brightness_detection.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/video_processing/main/source/color_enhancement.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/video_processing/main/source/content_analysis.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/video_processing/main/source/deflickering.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/video_processing/main/source/frame_preprocessor.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/video_processing/main/source/spatial_resampler.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/video_processing/main/source/video_decimator.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/video_processing/main/source/video_processing_impl.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/video_processing/main/source/content_analysis_sse2.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/video_render/external/video_render_external_impl.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/video_render/incoming_video_stream.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/video_render/video_render_frames.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/video_render/video_render_impl.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/video_render/video_render_internal_impl.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/video_render/linux/video_render_linux_impl.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/video_render/linux/video_x11_channel.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/modules/video_render/linux/video_x11_render.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/tools/simple_command_line_parser.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/video/call.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/video/encoded_frame_callback_adapter.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/video/receive_statistics_proxy.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/video/send_statistics_proxy.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/video/transport_adapter.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/video/video_receive_stream.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/video/video_send_stream.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/video_engine/call_stats.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/video_engine/encoder_state_feedback.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/video_engine/overuse_frame_detector.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/video_engine/report_block_stats.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/video_engine/stream_synchronization.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/video_engine/vie_base_impl.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/video_engine/vie_capture_impl.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/video_engine/vie_capturer.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/video_engine/vie_channel.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/video_engine/vie_channel_group.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/video_engine/vie_channel_manager.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/video_engine/vie_codec_impl.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/video_engine/vie_encoder.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/video_engine/vie_external_codec_impl.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/video_engine/vie_file_image.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/video_engine/vie_frame_provider_base.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/video_engine/vie_image_process_impl.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/video_engine/vie_impl.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/video_engine/vie_input_manager.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/video_engine/vie_manager_base.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/video_engine/vie_network_impl.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/video_engine/vie_receiver.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/video_engine/vie_ref_count.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/video_engine/vie_remb.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/video_engine/vie_renderer.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/video_engine/vie_render_impl.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/video_engine/vie_render_manager.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/video_engine/vie_rtp_rtcp_impl.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/video_engine/vie_sender.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/video_engine/vie_shared_data.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/video_engine/vie_sync_module.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/voice_engine/channel.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/voice_engine/channel_manager.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/voice_engine/dtmf_inband.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/voice_engine/dtmf_inband_queue.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/voice_engine/level_indicator.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/voice_engine/monitor_module.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/voice_engine/network_predictor.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/voice_engine/output_mixer.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/voice_engine/shared_data.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/voice_engine/statistics.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/voice_engine/transmit_mixer.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/voice_engine/utility.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/voice_engine/voe_audio_processing_impl.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/voice_engine/voe_base_impl.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/voice_engine/voe_codec_impl.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/voice_engine/voe_dtmf_impl.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/voice_engine/voe_external_media_impl.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/voice_engine/voe_file_impl.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/voice_engine/voe_hardware_impl.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/voice_engine/voe_neteq_stats_impl.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/voice_engine/voe_network_impl.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/voice_engine/voe_rtp_rtcp_impl.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/voice_engine/voe_video_sync_impl.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/voice_engine/voe_volume_control_impl.cc"
+	"/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/webrtc/voice_engine/voice_engine_impl.cc"
 )
-target_link_libraries(peerconnection_client webrtc ${GTK2_LIBRARIES})
-
-add_executable(stunserver
-  "webrtc_src/talk/examples/stunserver/stunserver_main.cc"
-)
-target_link_libraries(stunserver webrtc)
-
-
-add_executable(turnserver
-  "webrtc_src/talk/examples/turnserver/turnserver_main.cc"
-)
-target_link_libraries(turnserver webrtc)
-
-add_executable(relayserver
-  "webrtc_src/talk/examples/turnserver/turnserver_main.cc"
-)
-target_link_libraries(relayserver webrtc)
-
-
-#############
-## Install ##
-#############
-
-## Mark executables and/or libraries for installation
-install(TARGETS yuv webrtc_usrsctp webrtc_opus webrtc peerconnection_server peerconnection_client stunserver turnserver relayserver webrtc_vpx
-  ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-  LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-  RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
-)
-
-## Copy header files
-install(DIRECTORY webrtc_src/talk
-  DESTINATION ${CATKIN_GLOBAL_INCLUDE_DESTINATION}
-  FILES_MATCHING PATTERN "*.hpp" PATTERN "*.h"
-  PATTERN ".svn" EXCLUDE
-)
-install(DIRECTORY webrtc_src/webrtc
-  DESTINATION ${CATKIN_GLOBAL_INCLUDE_DESTINATION}
-  FILES_MATCHING PATTERN "*.hpp" PATTERN "*.h"
-  PATTERN ".svn" EXCLUDE
-)
-install(DIRECTORY webrtc_src/third_party
-  DESTINATION ${CATKIN_GLOBAL_INCLUDE_DESTINATION}
-  FILES_MATCHING PATTERN "*.hpp" PATTERN "*.h"
-  PATTERN ".svn" EXCLUDE
+target_link_libraries(my_lib
+	"dl"
+	"rt"
+	"Xext"
+	"X11"
+	"Xcomposite"
+	"Xrender"
+	"m"
+	"Xcursor"
+	"Xdamage"
+	"Xfixes"
+	"Xi"
+	"Xtst"
 )
