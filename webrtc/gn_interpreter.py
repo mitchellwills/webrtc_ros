@@ -9,6 +9,12 @@ import itertools
 import traceback
 import copy
 
+FILE = 1
+DIRECTORY = 2
+FILE_OR_DIRECTORY = 3
+BUILD_FILE = 4
+UNKNOWN = 5
+
 def print_exc_plus():
     """
     Print the usual traceback information, followed by a listing of all the
@@ -32,11 +38,19 @@ def print_exc_plus():
         print "Frame %s in %s at line %s" % (frame.f_code.co_name,
                                              frame.f_code.co_filename,
                                              frame.f_lineno)
+
         if frame.f_code.co_name == "resolveTarget":
             if "file_scope" in frame.f_locals:
-                print "\tresolving " + frame.f_locals["name"] + " in " + frame.f_locals["file_scope"].path
+                print "\tresolving " + frame.f_locals["name"] + " in " + frame.f_locals["file_scope"].resolvePath(".", search_type=FILE_OR_DIRECTORY)
             else:
                 print "\tresolving " + frame.f_locals["name"]
+        if frame.f_code.co_name == "evalFile":
+            if frame.f_locals["parent_scope"] == None:
+                print "\tFile: " + frame.f_locals["f"] + " in new scope"
+            else:
+                print "\tFile: " + frame.f_locals["f"]
+        if frame.f_code.co_name == "eval":
+            print "\t" + str(frame.f_locals["statement"])
 
 class TargetDefinition:
     def __init__(self, type, scope):
@@ -80,6 +94,23 @@ def func_assert(args, body, scope):
         raise Exception("Assert failed: " + message)
     return None
 
+def func_action(args, body, scope):
+    name = args[0]
+    print "!!!!Action not yet implemented: ", name
+    scope.declareTarget(name, TargetDefinition("action", Scope(scope)))
+    return None
+
+def func_action_foreach(args, body, scope):
+    name = args[0]
+    print "!!!!Action foreach not yet implemented: ", name
+    scope.declareTarget(name, TargetDefinition("action_foreach", Scope(scope)))
+    return None
+
+def func_get_target_outputs(args, body, scope):
+    name = args[0]
+    print "!!!!get_target_outputs not yet implemented: ", name
+    return []
+
 @no_eval_args
 def func_defined(args, body, scope):
     val = args[0]
@@ -102,7 +133,9 @@ def func_template(declaration_args, template_body, declaration_scope):
         for statement in body:
             eval(statement, call_body_scope)
 
-        template_scope = OverlayScope(scope, {"invoker": call_body_scope, "target_name": target_name})
+        template_scope = Scope(scope)
+        scope.set("invoker", call_body_scope)
+        scope.set("target_name", target_name)
         for statement in template_body:
             eval(statement, template_scope)
 
@@ -119,7 +152,7 @@ def func_rebase_path(args, body, scope):
     current_base = "." if len(args) < 3 else args[2]
     if current_base != ".":
         print "!!!!rebase with current_base not '.' is not supported"
-    abspath = scope.resolvePath(input, isFile=False)
+    abspath = scope.resolvePath(input, search_type=UNKNOWN)
     if new_base == "":
         return abspath
     else:
@@ -138,6 +171,8 @@ def func_exec_script(args, body, scope):
         result = subprocess.check_output(command)
         parser = gn_parse.build_parser("primary_expr")
         return parser.parse(result)
+    elif input_conversion == "string":
+        return subprocess.check_output(command)
     elif input_conversion == "scope":
         result = subprocess.check_output(command)
         parser = gn_parse.build_parser()
@@ -148,7 +183,7 @@ def func_exec_script(args, body, scope):
                 eval(statement, scope)
         return scope
     else:
-        print "!!!!unknown input conversion: ", input_conversion
+        print "!!!!unknown input conversion: ", input_conversion, " for file: ", filename
     return None
 
 def func_toolchain(args, body, scope):
@@ -202,9 +237,9 @@ def func_source_set(args, body, scope):
 
     filter_sources(source_set_scope)
     sources = source_set_scope.get('sources')
-    sources[:] = map(lambda f: scope.resolvePath(f, isFile=False), sources) # todo should theoretically care that they are a file, but some names are bad
+    sources[:] = map(lambda f: scope.resolvePath(f, search_type=UNKNOWN), sources) # todo should theoretically care that they are a file, but some names are bad
     include_dirs = source_set_scope.get('include_dirs')
-    include_dirs[:] = map(lambda f: scope.resolvePath(f, isFile=False), include_dirs) # todo should theoretically care that they are a file, but some names are bad
+    include_dirs[:] = map(lambda f: scope.resolvePath(f, search_type=UNKNOWN), include_dirs) # todo should theoretically care that they are a file, but some names are bad
 
     scope.declareTarget(name, TargetDefinition("source_set", source_set_scope))
 
@@ -223,9 +258,9 @@ def func_static_library(args, body, scope):
 
     filter_sources(static_library_scope)
     sources = static_library_scope.get('sources')
-    sources[:] = map(lambda f: scope.resolvePath(f, isFile=False), sources) # todo should theoretically care that they are a file, but some names are bad
+    sources[:] = map(lambda f: scope.resolvePath(f, search_type=UNKNOWN), sources) # todo should theoretically care that they are a file, but some names are bad
     include_dirs = static_library_scope.get('include_dirs')
-    include_dirs[:] = map(lambda f: scope.resolvePath(f, isFile=False), include_dirs) # todo should theoretically care that they are a file, but some names are bad
+    include_dirs[:] = map(lambda f: scope.resolvePath(f, search_type=UNKNOWN), include_dirs) # todo should theoretically care that they are a file, but some names are bad
 
     scope.declareTarget(name, TargetDefinition("static_library", static_library_scope))
 
@@ -244,9 +279,9 @@ def func_executable(args, body, scope):
 
     filter_sources(executable_scope)
     sources = executable_scope.get('sources')
-    sources[:] = map(lambda f: scope.resolvePath(f, isFile=False), sources) # todo should theoretically care that they are a file, but some names are bad
+    sources[:] = map(lambda f: scope.resolvePath(f, search_type=UNKNOWN), sources) # todo should theoretically care that they are a file, but some names are bad
     include_dirs = executable_scope.get('include_dirs')
-    include_dirs[:] = map(lambda f: scope.resolvePath(f, isFile=False), include_dirs) # todo should theoretically care that they are a file, but some names are bad
+    include_dirs[:] = map(lambda f: scope.resolvePath(f, search_type=UNKNOWN), include_dirs) # todo should theoretically care that they are a file, but some names are bad
 
     scope.declareTarget(name, TargetDefinition("executable", executable_scope))
 
@@ -261,7 +296,7 @@ def func_config(args, body, scope):
         eval(statement, config_scope)
 
     include_dirs = config_scope.get('include_dirs')
-    include_dirs[:] = map(lambda f: scope.resolvePath(f, isFile=False), include_dirs) # todo should theoretically care that they are a file, but some names are bad
+    include_dirs[:] = map(lambda f: scope.resolvePath(f, search_type=UNKNOWN), include_dirs) # todo should theoretically care that they are a file, but some names are bad
 
     scope.declareTarget(name, TargetDefinition("config", config_scope))
 
@@ -299,8 +334,6 @@ class Scope(object):
     def __init__(self, parent):
         self.parent = parent
         self.values = dict()
-        self.targets = dict()
-        self.templates = dict()
         self.sources_assignement_filter = []
 
     def global_scope(self):
@@ -310,25 +343,22 @@ class Scope(object):
         return self.parent.resolvePath(path, **kwargs)
 
     def declareTarget(self, name, target):
-        self.targets[name] = target
+        self.parent.declareTarget(name, target)
 
     def getTarget(self, name):
-        if name in self.targets:
-            return self.targets[name]
-        else:
-            return None
+        return self.parent.getTarget(name)
 
-    def declareTemplate(self, name, template):
-        self.templates[name] = template
-
-    def getTemplate(self, name):
-        if name in self.templates:
-            return self.templates[name]
-        else:
-            return None
+    def getTargets(self):
+        return self.parent.getTargets()
 
     def copyFrom(self, other):
         self.values.update(copy.deepcopy(other.values))
+
+    def declareTemplate(self, name, template):
+        self.parent.declareTemplate(name, template)
+
+    def getTemplate(self, name):
+        return self.parent.getTemplate(name)
 
     def has(self, name):
         if name in self.values:
@@ -343,58 +373,57 @@ class Scope(object):
         elif self.parent is not None:
             return self.parent.get(name)
         else:
-            raise Exception("Could not resolve: " + name)
+            raise Exception("Could not resolve identifier: " + name)
 
     def set(self, name, value):
         self.values[name] = value
 
-class OverlayScope(object):
-    def __init__(self, parent, values):
-        self.parent = parent
-        self.values = values
-
-    def resolvePath(self, path, **kwargs):
-        return self.parent.resolvePath(path, **kwargs)
-
-    def global_scope(self):
-        return self.parent.global_scope()
+class RootScope(Scope):
+    def __init__(self, parent):
+        super(RootScope, self).__init__(parent)
+        self.targets = dict()
+        self.templates = dict()
 
     def declareTarget(self, name, target):
-        self.parent.declareTarget(name, target)
+        self.targets[name] = target
 
     def getTarget(self, name):
-        return self.parent.getTarget(name)
+        if name in self.targets:
+            return self.targets[name]
+        elif self.parent is not None:
+            return self.parent.getTarget(name)
+        else:
+            return None
+
+    def getTargets(self):
+        if self.parent is not None:
+            all_targets = self.parent.getTargets().copy()
+            all_targets.update(self.targets)
+            return all_targets
+        else:
+            return self.targets
 
     def declareTemplate(self, name, template):
-        self.parent.declareTemplate(name, template)
+        self.templates[name] = template
 
     def getTemplate(self, name):
-        return self.parent.getTemplate(name)
-
-    def has(self, name):
-        if name in self.values:
-            return True
-        return self.parent.has(name)
-
-    def get(self, name):
-        if name in self.values:
-            return self.values[name]
-        return self.parent.get(name)
-
-    def set(self, name, value):
-        return self.parent.set(name, value)
+        if name in self.templates:
+            return self.templates[name]
+        elif self.parent is not None:
+            return self.parent.getTemplate(name)
+        else:
+            return None
 
 
-
-class FileScope(object):
-    def __init__(self, parent, path):
+class RelativeScope(object):
+    def __init__(self, parent, resolve_path):
         self.parent = parent
-        self.path = path
+        self.resolve_path = resolve_path
 
     def resolvePath(self, path, **kwargs):
         if path.startswith("//") or path.startswith("/"):
             return self.parent.resolvePath(path, **kwargs)
-        return self.parent.resolvePath(os.path.join(os.path.dirname(self.path), path), **kwargs)
+        return self.parent.resolvePath(os.path.join(os.path.dirname(self.resolve_path), path), **kwargs)
 
     def global_scope(self):
         return self.parent.global_scope()
@@ -404,6 +433,9 @@ class FileScope(object):
 
     def getTarget(self, name):
         return self.parent.getTarget(name)
+
+    def getTargets(self):
+        return self.parent.getTargets()
 
     def declareTemplate(self, name, template):
         self.parent.declareTemplate(name, template)
@@ -421,7 +453,7 @@ class FileScope(object):
         return self.parent.set(name, value)
 
 
-class GlobalScope(Scope):
+class GlobalScope(RootScope):
     def __init__(self, root_dirs):
         super(GlobalScope, self).__init__(None)
 
@@ -443,7 +475,7 @@ class GlobalScope(Scope):
     def global_scope(self):
         return self
 
-    def resolvePath(self, path, buildFile=False, isFile=True):
+    def resolvePath(self, path, search_type=FILE):
         potential_paths = []
 
         if path.startswith("//"):
@@ -454,13 +486,29 @@ class GlobalScope(Scope):
         else:
             raise Exception("Cannot resolve non-absolute path against root scope: " + path)
 
+        found_path = None
         for potential_path in potential_paths:
-            if not isFile or os.path.isfile(potential_path):
-                return os.path.normpath(potential_path)
-            if buildFile and os.path.isdir(potential_path):
-                f = os.path.join(potential_path, "BUILD.gn")
-                if os.path.isfile(f):
-                    return os.path.normpath(f)
+            if os.path.isfile(potential_path) and (search_type == FILE or search_type == FILE_OR_DIRECTORY or search_type == UNKNOWN):
+                found_path = potential_path
+                break
+            if os.path.isdir(potential_path) and (search_type == DIRECTORY or search_type == FILE_OR_DIRECTORY or search_type == UNKNOWN):
+                found_path = potential_path
+                break
+            if search_type == BUILD_FILE:
+                if os.path.isfile(potential_path):
+                    found_path = potential_path
+                    break
+                if os.path.isdir(potential_path):
+                    f = os.path.join(potential_path, "BUILD.gn")
+                    if os.path.isfile(f):
+                        found_path = f
+                        break
+
+        if found_path is None and search_type == UNKNOWN and len(potential_paths) > 0:
+            found_path = potential_paths[0]
+
+        if found_path is not None:
+            return os.path.normpath(found_path)
         raise Exception("Could not find file: " + path)
 
     def has(self, name):
@@ -477,7 +525,7 @@ class GlobalScope(Scope):
         elif name in self.default_args:
             return self.default_args[name]
         else:
-            raise Exception("Could not resolve: " + name)
+            raise Exception("Could not resolve identifier: " + name)
 
 
 def eval(statement, scope):
@@ -544,10 +592,13 @@ def eval(statement, scope):
     if type(statement) is gn_parse.Assignment:
         if statement.op == "=":
             current_value = scope.get(statement.var) if scope.has(statement.var) else None
-            if current_value is None or type(current_value) is not list or len(current_value) == 0:
-                scope.set(statement.var, eval(statement.value, scope))
+            new_value = eval(statement.value, scope)
+            if current_value is None or type(current_value) is not list or \
+               (type(current_value) is list and len(current_value) == 0) or \
+               (type(new_value) is list and len(new_value) == 0):
+                scope.set(statement.var, new_value)
             else:
-                raise Exception(statement.var + " was not unset or an empty list")
+                raise Exception(statement.var + " was not unset or an empty list, was: " + str(current_value) + ", new value: " + str(new_value))
         elif statement.op == "+=":
             scope.get(statement.var).extend(eval(statement.value, scope))
         elif statement.op == "-=":
@@ -586,12 +637,24 @@ def eval(statement, scope):
     print "!!!!!Unknown statement type", type(statement), statement
     return None
 
-parsed_files = dict()
+# Initialize global scope
+root_dirs = ["/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/",
+             "/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/chromium_src/",
+             "/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/third_party_src/",
+             "/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/yuv_src/",
+             "/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/shim"]
+global_scope = GlobalScope(root_dirs)
 
-def evalFile(f, scope):
+
+parsed_files = dict()
+def evalFile(f, parent_scope = None):
     parser = gn_parse.build_parser()
 
-    scope = FileScope(scope, f)
+    if parent_scope is None:
+        scope = RelativeScope(RootScope(global_scope), f)
+    else:
+        scope = RelativeScope(parent_scope, f)
+
     if f not in parsed_files:
         print "Parsing: ", f
         statements = parsed_files[f] = parser.parse(file(f).read())
@@ -605,21 +668,6 @@ def evalFile(f, scope):
                 print result
 
     return scope
-
-# Initialize global scope
-root_dirs = ["/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/webrtc_src/",
-             "/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/chromium_src/",
-             "/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/yuv_src/",
-             "/home/mitchell/deps_workspace/src/webrtc_ros/webrtc/shim"]
-global_scope = GlobalScope(root_dirs)
-
-evalFile(global_scope.resolvePath("//webrtc_ros/config.gni"), global_scope)
-
-evalFile(global_scope.resolvePath("//build/config/BUILDCONFIG.gn"), global_scope)
-
-# load toolchain
-if not global_scope.has("current_toolchain"):
-    global_scope.set("current_toolchain", global_scope.get("default_toolchain"))
 
 # based on http://www.peterbe.com/plog/uniqifiers-benchmark
 def uniquify(seq):
@@ -708,22 +756,21 @@ def resolveTarget(name, resolve_scope):
     else:
         raise Exception("Error parsing target name: "+name)
 
-    file_path = resolve_scope.resolvePath(filename, buildFile=True)
+    file_path = resolve_scope.resolvePath(filename, search_type=BUILD_FILE)
 
     if file_path not in file_eval_cache:
-        scope = Scope(global_scope)
-        file_scope = evalFile(file_path, scope)
-        file_eval_cache[file_path] = (file_scope, scope)
+        file_scope = evalFile(file_path)
+        file_eval_cache[file_path] = file_scope
     else:
-        file_scope, scope = file_eval_cache[file_path]
+        file_scope = file_eval_cache[file_path]
 
     if file_path not in target_cache:
         target_cache[file_path] = {}
 
-    for file_target_name in scope.targets:
+    for file_target_name in file_scope.getTargets():
         if target_name == "" or file_target_name == target_name:
             if file_target_name not in target_cache[file_path]:
-                file_target = scope.targets[file_target_name]
+                file_target = file_scope.getTarget(file_target_name)
                 resolved_deps = {}
                 for dep_key in ["deps", "public_deps", "data_deps", "configs", "public_configs"]:
                     deps = file_target.scope.get(dep_key) if file_target.scope.has(dep_key) else []
@@ -748,11 +795,21 @@ def resolveTarget(name, resolve_scope):
         return (file_path+":"+target_name, target_cache[file_path][target_name])
 
 
-resolveTarget(global_scope.get("current_toolchain"), global_scope)
-
-
 
 try:
+    evalFile(global_scope.resolvePath("//webrtc_ros/config.gni"), global_scope)
+
+    evalFile(global_scope.resolvePath("//build/config/BUILDCONFIG.gn"), global_scope)
+
+    # load toolchain
+    if not global_scope.has("current_toolchain"):
+        global_scope.set("current_toolchain", global_scope.get("default_toolchain"))
+
+    resolveTarget(global_scope.get("current_toolchain"), global_scope)
+
+
+
+
     webrtc_target = resolveTarget(sys.argv[1], global_scope)
 
     print
@@ -776,8 +833,8 @@ try:
             print "\t"+link
         print "\n\n\n"
 
-    #for arg in global_scope.default_args:
-    #    print arg, "=", global_scope.get(arg)
+    for arg in global_scope.default_args:
+        print arg, "=", global_scope.get(arg)
 
 
     build_file = open('CMakeLists.txt', 'w')
