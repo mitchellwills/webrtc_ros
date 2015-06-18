@@ -8,6 +8,7 @@
 #include "talk/app/webrtc/videosourceinterface.h"
 #include "webrtc/base/bind.h"
 #include "webrtc_ros/ros_video_capturer.h"
+#include "webrtc_ros/ros_subscriber_data_channel.h"
 
 namespace webrtc_ros
 {
@@ -319,6 +320,33 @@ void WebrtcClient::handle_message(MessageHandler::Type type, const std::string& 
 	  }
 	  else {
 	    ROS_WARN_STREAM("Unknwon video source type: " << audio_type);
+	  }
+
+	}
+	if(action.type == ConfigureAction::kAddDataChannelActionName) {
+	  FIND_PROPERTY_OR_CONTINUE("id", channel_id);
+	  FIND_PROPERTY_OR_CONTINUE("target", target);
+
+	  std::string target_type;
+	  std::string target_path;
+	  if(!parseUri(target, &target_type, &target_path)) {
+	    ROS_WARN_STREAM("Invalid URI: " << target);
+	    continue;
+	  }
+
+	  if(target_type == "ros_subscriber") {
+	    webrtc::DataChannelInit channel_config;
+	    channel_config.reliable = true;
+	    rtc::scoped_refptr<webrtc::DataChannelInterface> channel = peer_connection_->CreateDataChannel(channel_id, &channel_config);
+	    new RosSubscriberDataChannel(channel, nh_, target_path);
+
+	    if (!channel) {
+	      ROS_WARN("Creating data channel failed");
+	      continue;
+	    }
+	  }
+	  else {
+	    ROS_WARN_STREAM("Unknwon data channel target type: " << target_type);
 	  }
 
 	}

@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 2.8.12)
 project(webrtc_ros)
 
+find_package(ZLIB REQUIRED)
+
 find_package(catkin REQUIRED COMPONENTS
   cv_bridge
   roscpp
@@ -8,10 +10,27 @@ find_package(catkin REQUIRED COMPONENTS
   image_transport
   nodelet
   async_web_server_cpp
+  topic_tools
+  message_generation
+)
+
+add_message_files(
+   FILES
+   MessageInfo.msg
+   MessageField.msg
+)
+
+add_service_files(
+   FILES
+   GetMessageInfo.srv
+)
+
+generate_messages(
+  DEPENDENCIES
 )
 
 catkin_package(
-  CATKIN_DEPENDS cv_bridge roscpp webrtc image_transport nodelet async_web_server_cpp
+  CATKIN_DEPENDS cv_bridge roscpp webrtc image_transport nodelet async_web_server_cpp topic_tools message_runtime
 )
 
 ###########
@@ -21,6 +40,7 @@ catkin_package(
 include_directories(
   include
   ${catkin_INCLUDE_DIRS}
+  ${ZLIB_INCLUDE_DIRS}
 )
 
 # This library contains code that cannot be compiled with c++11 enabled
@@ -48,10 +68,13 @@ add_library(webrtc_ros_server
   src/webrtc_client.cpp
   src/ros_video_capturer.cpp
   src/ros_video_renderer.cpp
+
+  src/ros_subscriber_data_channel.cpp
 )
 target_link_libraries(webrtc_ros_server
   ${catkin_LIBRARIES}
   ${WEBRTC_LIBRARIES}
+  ${ZLIB_LIBRARIES}
   webrtc_ros_server_noncpp11
 )
 target_compile_definitions(webrtc_ros_server PUBLIC ${WEBRTC_COMPILE_DEFINITIONS})

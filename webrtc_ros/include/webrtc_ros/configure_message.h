@@ -22,6 +22,7 @@ struct ConfigureAction
   static std::string kRemoveStreamActionName;
   static std::string kAddVideoTrackActionName;
   static std::string kAddAudioTrackActionName;
+  static std::string kAddDataChannelActionName;
   static std::string kExpectStreamActionName;
   static std::string kExpectVideoTrackActionName;
 };

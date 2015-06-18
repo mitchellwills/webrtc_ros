@@ -17,6 +17,10 @@
   <depend>image_transport</depend>
   <depend>nodelet</depend>
   <depend>async_web_server_cpp</depend>
+  <depend>topic_tools</depend>
+  <build_depend>message_generation</build_depend>
+  <exec_depend>message_runtime</exec_depend>
+  <depend>zlib</depend>
 
   <export>
     <nodelet plugin="${prefix}/nodelet_plugins.xml" />

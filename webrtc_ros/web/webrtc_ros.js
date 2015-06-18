@@ -1,7 +1,7 @@
 window.WebrtcRos = (function() {
-    var newStreamId = function() {
+    var newId = function() {
 	// Just need unique identifiers for streams
-	return "webrtc_ros_stream-"+Math.floor(Math.random()*1000000000).toString();
+	return "webrtc_ros-"+Math.floor(Math.random()*1000000000).toString();
     };
     var WebrtcRosConnection = function(signalingServerPath) {
 	this.signalingServerPath = signalingServerPath || "ws://"+window.location.host+"/webrtc";
@@ -18,6 +18,7 @@ window.WebrtcRos = (function() {
 
 	this.addStreamCallbacks = {};
 	this.removeStreamCallbacks = {};
+	this.addDataChannelCallbacks = {}
     };
 
     WebrtcRosConnection.prototype.connect = function(){
@@ -73,6 +74,16 @@ window.WebrtcRos = (function() {
 		});
 	    }
 	};
+	this.peerConnection.ondatachannel = function(event) {
+	    console.log(event);
+	    var channel = event.channel;
+	    var callbackData = self.addDataChannelCallbacks[channel.label];
+	    if(callbackData) {
+		callbackData.resolve({
+		    "channel": channel
+		});
+	    }
+	};
     };
     WebrtcRosConnection.prototype.close = function(){
 	if(this.peerConnection) {
@@ -122,7 +133,7 @@ window.WebrtcRos = (function() {
     };
 
     WebrtcRosConnection.prototype.addRemoteStream = function(config) {
-	var stream_id = newStreamId();
+	var stream_id = newId();
 	var self = this;
 
 	this.lastConfigureActionPromise = this.lastConfigureActionPromise.then(function(actions) {
@@ -158,6 +169,20 @@ window.WebrtcRos = (function() {
 	this.lastConfigureActionPromise = this.lastConfigureActionPromise.then(function(actions) {
 	    actions.push({"type":"remove_stream", "id": stream.id});
 	    return actions;
+	});
+    };
+    WebrtcRosConnection.prototype.addDataChannel = function(config) {
+	var self = this;
+	var channel_id = newId();
+	this.lastConfigureActionPromise = this.lastConfigureActionPromise.then(function(actions) {
+	    actions.push({"type":"add_data_channel", "id": channel_id, "target": config.target});
+	    return actions;
+	});
+	return new Promise(function(resolve, reject) {
+	    self.addDataChannelCallbacks[channel_id] = {
+		"resolve": resolve,
+		"reject": reject
+	    };
 	});
     };
     WebrtcRosConnection.prototype.addLocalStream = function(user_media_config, local_stream_config) {
