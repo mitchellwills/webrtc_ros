@@ -5,10 +5,6 @@
 #include "talk/media/base/videocapturerfactory.h"
 #include <ros/ros.h>
 #include <image_transport/image_transport.h>
-#include <opencv2/highgui/highgui.hpp>
-#include <opencv2/imgproc/imgproc.hpp>
-#include <opencv2/core/core.hpp>
-#include <cv_bridge/cv_bridge.h>
 #include <mutex>
 #include <boost/enable_shared_from_this.hpp>
 

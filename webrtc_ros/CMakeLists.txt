@@ -48,6 +48,8 @@ add_library(webrtc_ros_server
   src/webrtc_client.cpp
   src/ros_video_capturer.cpp
   src/ros_video_renderer.cpp
+  src/ros_video_frame_tools.cpp
+  src/ros_video_frame_tools_webrtc.cpp
 )
 target_link_libraries(webrtc_ros_server
   ${catkin_LIBRARIES}

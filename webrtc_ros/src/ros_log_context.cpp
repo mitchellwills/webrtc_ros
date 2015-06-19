@@ -10,12 +10,11 @@ RosLogContext::RosLogContext() {
   webrtc::Trace::CreateTrace();
   if (webrtc::Trace::SetTraceCallback(this) != 0)
     ROS_FATAL_NAMED("webrtc", "Failed to enable webrtc ROS trace context");
-  rtc::LogMessage::LogContext(rtc::LS_INFO);
   rtc::LogMessage::AddLogToStream(this, rtc::LS_INFO);
 
   // this disables logging to stderr (which is done by default)
   old_log_to_debug_ = rtc::LogMessage::GetLogToDebug();
-  rtc::LogMessage::LogToDebug(rtc::LogMessage::NO_LOGGING);
+  rtc::LogMessage::LogToDebug(rtc::LS_NONE);
 }
 
 RosLogContext::~RosLogContext() {
@@ -78,7 +77,7 @@ void RosLogContext::Print(webrtc::TraceLevel level, const char* message, int len
 }
 
 
-// rtc::StreamInterface
+// rtc::LogSink
 static boost::regex log_context_regex("^(\\w+)\\(([^:]+):(\\d+)\\): (.*)", boost::regex_constants::ECMAScript|boost::regex_constants::icase|boost::regex_constants::optimize);
 static bool ParseLogMessageContext(const std::string message, rtc::LoggingSeverity* severity, std::string* file, int* line, std::string* actual_message) {
   boost::smatch match;
@@ -124,19 +123,11 @@ static ::ros::console::levels::Level RosLogLevelFromRtcLoggingSeverity(rtc::Logg
     return ::ros::console::levels::Error;
   }
 }
-rtc::StreamState RosLogContext::GetState() const {
-  return rtc::SS_OPEN;
-}
-rtc::StreamResult RosLogContext::Read(void* buffer, size_t buffer_len,
-				      size_t* read, int* error) {
-  return rtc::SR_EOS;
-}
-rtc::StreamResult RosLogContext::Write(const void* data, size_t data_len,
-				       size_t* written, int* error) {
-  std::string message((const char*)data, data_len);
+void RosLogContext::OnLogMessage(const std::string& const_message) {
+  std::string message = const_message;
   boost::algorithm::trim(message);
 
-  rtc::LoggingSeverity severity;
+  /*rtc::LoggingSeverity severity;
   std::string file;
   int line;
   std::string actual_message;
@@ -146,12 +137,8 @@ rtc::StreamResult RosLogContext::Write(const void* data, size_t data_len,
   else {
     ROS_WARN_STREAM_THROTTLE(10.0, "Failed to parse webrtc log message: " << message );
     CustomRosLog(::ros::console::levels::Info, actual_message, "", -1, "");
-  }
-
-  *written = data_len;
-  return rtc::SR_SUCCESS;
-}
-void RosLogContext::Close() {
+  }*/
+  CustomRosLog(::ros::console::levels::Debug, message, "", -1, "");
 }
 
 

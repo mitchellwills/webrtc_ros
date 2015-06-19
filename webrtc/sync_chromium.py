@@ -29,10 +29,9 @@ CHROMIUM_SRC_DIRS = [
     "third_party/jsoncpp",
     "third_party/usrsctp",
     "third_party/expat",
-    "third_party/protobuf",
     "third_party/opus",
     "third_party/yasm",
-    "net/third_party/nss",
+    "third_party/boringssl",
     "third_party/binutils",
 ]
 CHROMIUM_SRC_FILES = [
@@ -50,6 +49,7 @@ CHROMIUM_DEPS = [
     "third_party/usrsctp/usrsctplib",
     "tools/gyp",
     "third_party/jsoncpp/source",
+    "third_party/boringssl/src",
 ]
 
 CHROMIUM_HOOKS = [
